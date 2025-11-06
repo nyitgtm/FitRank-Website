@@ -1,5 +1,5 @@
 {
-  "name": "my-fitrank-website",
+  "name": "fitrank-coaches-portal",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,7 +11,9 @@
   "dependencies": {
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "next": "16.0.1"
+    "next": "16.0.1",
+    "firebase": "^11.0.2",
+    "firebase-admin": "^12.7.0"
   },
   "devDependencies": {
     "typescript": "^5",
