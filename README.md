@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FitRank Coaches Portal
 
-## Getting Started
+A Next.js web application for FitRank coaches to view leaderboards and manage users.
 
-First, run the development server:
+## Features
 
+- **Coach-Only Authentication**: Only users with `isCoach: true` can login
+- **Leaderboard Viewing**: 
+  - View by Tokens or Weight (Bench Press, Squat, Deadlift)
+  - Real-time data from Firebase
+- **User Management**: View all users with filtering by team and role
+- **Fully Connected to Firebase**: No hardcoded data, all data fetched from Firestore
+
+## Firebase Configuration
+
+The app is already configured to connect to the FitRank Firebase project. All data is fetched in real-time from:
+- **Users Collection**: User profiles, tokens, teams
+- **Teams Collection**: Team information
+- **Workouts Collection**: Workout records for weight leaderboards
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- TypeScript
+- Firebase (Auth & Firestore)
+- Tailwind CSS
+
+# Quick Start Guide
+
+## Prerequisites
+- Node.js 18+ installed
+- Access to FitRank Firebase project
+
+## Installation
+
+1. Navigate to the project directory:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd "FitRank-Website copy"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Running the Application
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Start the development server:
+```bash
+npm run dev
+```
 
-## Learn More
+The application will be available at: http://localhost:3000
 
-To learn more about Next.js, take a look at the following resources:
+## Login Instructions
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Navigate to http://localhost:3000
+2. You'll be redirected to the login page
+3. Sign in with a coach account (must have `isCoach: true` in Firestore)
+4. After successful login, you'll see the dashboard with:
+   - **Leaderboard Tab**: View rankings by tokens or lift weights
+   - **Users Tab**: Browse all users with filters
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Features Overview
 
-## Deploy on Vercel
+### Leaderboard
+- Toggle between Tokens and Weight rankings
+- For weight rankings, select lift type (Bench Press, Squat, Deadlift)
+- Real-time data from Firebase Firestore
+- Shows rank, user info, team, and score
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Users View
+- Search by name or username
+- Filter by team
+- Filter by role (Coaches/Athletes)
+- View user tokens and team information
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Troubleshooting
+
+### Login Issues
+- Ensure the user has `isCoach: true` in their Firestore document
+- Check Firebase Authentication is enabled
+- Verify email/password are correct
+
+### Data Not Loading
+- Check Firebase console for collection structure
+- Ensure collections exist: `users`, `teams`, `workouts`
+- Check browser console for errors
+
+## Tech Stack
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript
+- **Database**: Firebase Firestore
+- **Auth**: Firebase Authentication
+- **Styling**: Tailwind CSS
