@@ -6,8 +6,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/Navbar';
 import LeaderboardView from '@/components/LeaderboardView';
 import UsersView from '@/components/UsersView';
+import VideoUploadView from '@/components/VideoUploadView';
+import PostsView from '@/components/PostsView';
 
-type TabType = 'leaderboard' | 'users';
+type TabType = 'leaderboard' | 'users' | 'videos' | 'posts' | null;
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
@@ -59,12 +61,34 @@ export default function DashboardPage() {
           >
             👥 All Users
           </button>
+          <button
+            onClick={() => setActiveTab(prev => (prev === 'videos' ? null : 'videos'))}
+            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'videos'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            🎥 Uploaded Videos
+          </button>
+          <button
+            onClick={() => setActiveTab(prev => (prev === 'posts' ? null : 'posts'))}
+            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'posts'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            💬 Posts
+          </button>
         </div>
 
         {/* Content */}
         <div className="bg-white rounded-xl shadow-lg">
           {activeTab === 'leaderboard' && <LeaderboardView />}
           {activeTab === 'users' && <UsersView />}
+          {activeTab === 'videos' && <VideoUploadView />}
+          {activeTab === 'posts' && <PostsView />}
         </div>
       </div>
     </div>
