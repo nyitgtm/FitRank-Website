@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useEffect, useState } from 'react';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
@@ -7,22 +7,26 @@ import LoadingSpinner from './LoadingSpinner';
 import { User } from '@/lib/types';
 
 type Post = {
-  id?: string;
-  userId: string;
-  content: string;
-  createdAt?: any;
+  id: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  createdAt: any;
+  imageURL?: string | null;
+  teamTag?: string;
+  likeCount: number;
+  commentCount: number;
 };
 
-type PostItem = {
-  id: string;
-  post: Post;
-  user?: User;
-};
+type SortField = 'authorName' | 'text' | 'createdAt' | 'teamTag' | 'likeCount' | 'commentCount';
+type SortDirection = 'asc' | 'desc';
 
 export default function PostsView() {
-  const [posts, setPosts] = useState<PostItem[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
+  const [sortField, setSortField] = useState<SortField>('createdAt');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   useEffect(() => {
     fetchPosts();
@@ -31,54 +35,34 @@ export default function PostsView() {
   const fetchPosts = async () => {
     setLoading(true);
     try {
-      // fetch users map
-      const usersSnap = await getDocs(collection(db, 'users'));
-      const usersMap = new Map<string, User>();
-      usersSnap.docs.forEach(u => usersMap.set(u.id, { id: u.id, ...u.data() } as User));
-
-      // fetch posts
       const postsSnap = await getDocs(collection(db, 'posts'));
-      const items: PostItem[] = postsSnap.docs
-        .map(d => ({ id: d.id, ...(d.data() as Post) }))
-        .map(p => {
-          // determine possible author id from several common field names
-          const possibleFields = ['userId', 'authorId', 'authorID', 'author', 'uid', 'user', 'creatorId'];
-          let rawAuthor: any = null;
-          for (const f of possibleFields) {
-            if ((p as any)[f]) {
-              rawAuthor = (p as any)[f];
-              break;
-            }
-          }
-
-          // normalize to string id
-          let authorId: string | null = null;
-          if (rawAuthor) {
-            if (typeof rawAuthor === 'string') {
-              authorId = rawAuthor;
-            } else if (typeof rawAuthor === 'object') {
-              // Firestore DocumentReference has .id or .path
-              if ((rawAuthor as any).id) authorId = (rawAuthor as any).id;
-              else if ((rawAuthor as any).path) authorId = (rawAuthor as any).path.split('/').pop();
-            }
-          }
-
-          if (typeof authorId === 'string' && authorId.includes('/')) {
-            authorId = authorId.split('/').pop() as string;
-          }
-
-          const user = authorId ? usersMap.get(authorId) : undefined;
-          if (!user) console.warn('PostsView: user not found for post', p.id, authorId, rawAuthor);
-
-          return { id: p.id!, post: p as Post, user } as PostItem;
-        })
-        .sort((a, b) => {
-          const ta = a.post.createdAt?.toDate ? a.post.createdAt.toDate().getTime() : new Date(a.post.createdAt ?? 0).getTime();
-          const tb = b.post.createdAt?.toDate ? b.post.createdAt.toDate().getTime() : new Date(b.post.createdAt ?? 0).getTime();
-          return tb - ta;
-        });
-
-      setPosts(items);
+      
+      const postsDataPromises = postsSnap.docs.map(async (docSnap) => {
+        const data = docSnap.data();
+        
+        // Get likes count
+        const likesSnap = await getDocs(collection(db, `posts/${docSnap.id}/likes`));
+        const likeCount = likesSnap.size;
+        
+        // Get comments count
+        const commentsSnap = await getDocs(collection(db, `posts/${docSnap.id}/comments`));
+        const commentCount = commentsSnap.size;
+        
+        return {
+          id: docSnap.id,
+          authorId: data.authorId || '',
+          authorName: data.authorName || 'Unknown',
+          text: data.text || '',
+          createdAt: data.createdAt,
+          imageURL: data.imageURL,
+          teamTag: data.teamTag,
+          likeCount,
+          commentCount
+        } as Post;
+      });
+      
+      const postsData = await Promise.all(postsDataPromises);
+      setPosts(postsData);
     } catch (error) {
       console.error('Error fetching posts:', error);
     } finally {
@@ -86,14 +70,57 @@ export default function PostsView() {
     }
   };
 
-  const markDeleting = (id: string, adding = true) => {
-    setDeletingIds(prev => (adding ? [...prev, id] : prev.filter(x => x !== id)));
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'createdAt' ? 'desc' : 'asc');
+    }
   };
+
+  const sortedPosts = [...posts].sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+
+    switch (sortField) {
+      case 'authorName':
+        aValue = a.authorName.toLowerCase();
+        bValue = b.authorName.toLowerCase();
+        break;
+      case 'text':
+        aValue = a.text.toLowerCase();
+        bValue = b.text.toLowerCase();
+        break;
+      case 'createdAt':
+        aValue = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        bValue = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        break;
+      case 'teamTag':
+        aValue = (a.teamTag || '').toLowerCase();
+        bValue = (b.teamTag || '').toLowerCase();
+        break;
+      case 'likeCount':
+        aValue = a.likeCount;
+        bValue = b.likeCount;
+        break;
+      case 'commentCount':
+        aValue = a.commentCount;
+        bValue = b.commentCount;
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   const deletePost = async (id: string) => {
     const ok = confirm('Delete this post? This will permanently remove it from Firebase.');
     if (!ok) return;
-    markDeleting(id, true);
+    setDeletingIds(prev => [...prev, id]);
     try {
       await deleteDoc(doc(db, 'posts', id));
       setPosts(prev => prev.filter(p => p.id !== id));
@@ -101,53 +128,130 @@ export default function PostsView() {
       console.error('Error deleting post:', error);
       alert('Failed to delete post. See console for details.');
     } finally {
-      markDeleting(id, false);
+      setDeletingIds(prev => prev.filter(x => x !== id));
     }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) {
+      return <span className="text-[#86868b]">↕</span>;
+    }
+    return sortDirection === 'asc' ? <span className="text-[#0071e3]">↑</span> : <span className="text-[#0071e3]">↓</span>;
+  };
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleString();
   };
 
   if (loading) {
     return (
-      <div className="p-6">
-        <h2 className="text-3xl font-bold mb-6">Posts</h2>
-        <LoadingSpinner />
+      <div>
+        <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight mb-8">All Posts</h2>
+        <div className="flex justify-center items-center h-64">
+          <div className="w-8 h-8 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">All Posts</h2>
-        <div className="text-sm text-gray-600">Total: {posts.length}</div>
+    <div>
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight">All Posts</h2>
+        <div className="text-[15px] text-[#86868b]">
+          {sortedPosts.length} {sortedPosts.length === 1 ? 'post' : 'posts'}
+        </div>
       </div>
 
-      {posts.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <p className="text-xl">No posts found</p>
-          <p className="text-sm mt-2">Posts will appear here.</p>
+      {sortedPosts.length === 0 ? (
+        <div className="text-center py-20 text-[#86868b]">
+          <p className="text-[17px]">No posts found</p>
+          <p className="text-[14px] mt-2">Posts will appear here</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {posts.map(item => (
-            <div key={item.id} className="bg-white rounded-xl shadow-md p-4 flex items-start gap-4">
-              <div className="flex-1">
-                <p className="font-semibold text-md">{item.user?.name ?? 'Unknown User'}</p>
-                <p className="text-sm text-gray-600">@{item.user?.username ?? 'unknown'}</p>
-                <p className="mt-2 text-gray-800 whitespace-pre-wrap">{(item.post.content ?? (item.post as any).text ?? (item.post as any).body ?? '')}</p>
-              </div>
-
-              <div className="flex flex-col items-end gap-2">
-                <div className="text-xs text-gray-500">{item.post.createdAt ? (item.post.createdAt?.toDate ? item.post.createdAt.toDate().toLocaleString() : new Date(item.post.createdAt).toLocaleString()) : ''}</div>
-                <button
-                  onClick={() => deletePost(item.id)}
-                  disabled={deletingIds.includes(item.id)}
-                  className={`px-4 py-2 rounded-lg font-semibold transition-all text-white ${deletingIds.includes(item.id) ? 'bg-red-300' : 'bg-red-600 hover:bg-red-700'}`}
-                >
-                  {deletingIds.includes(item.id) ? 'Deleting...' : 'Delete'}
-                </button>
-              </div>
+        <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-7 gap-4 px-6 py-4 bg-[#f5f5f7] border-b border-[#d2d2d7]">
+            <button
+              onClick={() => handleSort('authorName')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Author <SortIcon field="authorName" />
+            </button>
+            <button
+              onClick={() => handleSort('text')}
+              className="col-span-2 text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Text <SortIcon field="text" />
+            </button>
+            <button
+              onClick={() => handleSort('teamTag')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Team <SortIcon field="teamTag" />
+            </button>
+            <button
+              onClick={() => handleSort('likeCount')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Likes <SortIcon field="likeCount" />
+            </button>
+            <button
+              onClick={() => handleSort('commentCount')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Comments <SortIcon field="commentCount" />
+            </button>
+            <div className="text-left text-[14px] font-semibold text-[#1d1d1f]">
+              Actions
             </div>
-          ))}
+          </div>
+
+          {/* Table Body */}
+          {sortedPosts.map((post, index) => {
+            const isEven = index % 2 === 0;
+            const isDeleting = deletingIds.includes(post.id);
+            return (
+              <div
+                key={post.id}
+                className={`grid grid-cols-7 gap-4 px-6 py-4 ${
+                  isEven ? 'bg-white' : 'bg-[#f5f5f7]'
+                } hover:bg-[#e8e8ed] transition-colors`}
+              >
+                <div className="text-[15px] text-[#1d1d1f] flex flex-col">
+                  <span className="font-medium">{post.authorName}</span>
+                  <span className="text-[13px] text-[#86868b] mt-0.5">{formatDate(post.createdAt)}</span>
+                </div>
+                <div className="col-span-2 text-[15px] text-[#1d1d1f]">
+                  <p className="line-clamp-3">{post.text}</p>
+                </div>
+                <div className="text-[15px] text-[#86868b]">
+                  {post.teamTag || '—'}
+                </div>
+                <div className="text-[15px] font-medium text-[#1d1d1f]">
+                  {post.likeCount}
+                </div>
+                <div className="text-[15px] font-medium text-[#1d1d1f]">
+                  {post.commentCount}
+                </div>
+                <div>
+                  <button
+                    onClick={() => deletePost(post.id)}
+                    disabled={isDeleting}
+                    className={`px-4 py-2 rounded-lg text-[14px] font-medium transition-all ${
+                      isDeleting
+                        ? 'bg-[#86868b] text-white cursor-not-allowed'
+                        : 'bg-[#ff3b30] text-white hover:bg-[#ff453a] active:bg-[#ff2d20]'
+                    }`}
+                  >
+                    {isDeleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
