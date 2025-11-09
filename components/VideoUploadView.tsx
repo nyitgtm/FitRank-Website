@@ -1,27 +1,31 @@
-
-"use client";
+'use client';
 
 import { useEffect, useState } from 'react';
 import { collection, getDocs, updateDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import app from '@/lib/firebase';
 import { getStorage, ref, deleteObject } from 'firebase/storage';
-import LoadingSpinner from './LoadingSpinner';
 import { Workout, User, Team } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
 
-type Item = {
+type WorkoutItem = {
   id: string;
   workout: Workout;
   user?: User;
   team?: Team;
 };
 
+type SortField = 'userName' | 'liftType' | 'weight' | 'createdAt' | 'team';
+type SortDirection = 'asc' | 'desc';
+
 export default function VideoUploadView() {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<WorkoutItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [sortField, setSortField] = useState<SortField>('createdAt');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null);
   const { user } = useAuth();
 
   // add form state
@@ -80,16 +84,7 @@ export default function VideoUploadView() {
         return { id: docSnap.id, ...(data as any) } as Workout & { id: string };
       };
 
-      const getTime = (ts: any) => {
-        if (!ts) return 0;
-        if (typeof ts === 'object' && typeof ts.toDate === 'function') return ts.toDate().getTime();
-        if (ts instanceof Date) return ts.getTime();
-        if (typeof ts === 'number') return ts;
-        const parsed = new Date(ts as any).getTime();
-        return isNaN(parsed) ? 0 : parsed;
-      };
-
-      const list: Item[] = workoutsSnap.docs
+      const list: WorkoutItem[] = workoutsSnap.docs
         .map(docSnap => toPlain(docSnap))
         .filter(w => (w.videoUrl || '').length > 0 && w.status !== 'removed')
         .map(w => {
@@ -103,11 +98,10 @@ export default function VideoUploadView() {
           if (typeof teamRef === 'string' && teamRef.includes('/')) teamRef = teamRef.split('/').pop() as string;
           const team = teamsMap.get(teamRef);
 
-          return { id: w.id, workout: w, user, team } as Item;
-        })
-  .sort((a, b) => getTime(b.workout.createdAt) - getTime(a.workout.createdAt));
+          return { id: w.id, workout: w, user, team } as WorkoutItem;
+        });
 
-  setItems(list);
+      setItems(list);
     } catch (error) {
       console.error('Error loading videos:', error);
     } finally {
@@ -115,14 +109,57 @@ export default function VideoUploadView() {
     }
   };
 
-  const markDeleting = (id: string, adding = true) => {
-    setDeletingIds(prev => (adding ? [...prev, id] : prev.filter(x => x !== id)));
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'createdAt' || field === 'weight' ? 'desc' : 'asc');
+    }
+  };
+
+  const sortedItems = [...items].sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+
+    switch (sortField) {
+      case 'userName':
+        aValue = (a.user?.name || 'Unknown').toLowerCase();
+        bValue = (b.user?.name || 'Unknown').toLowerCase();
+        break;
+      case 'liftType':
+        aValue = a.workout.liftType;
+        bValue = b.workout.liftType;
+        break;
+      case 'weight':
+        aValue = a.workout.weight || 0;
+        bValue = b.workout.weight || 0;
+        break;
+      case 'createdAt':
+        aValue = getTime(a.workout.createdAt);
+        bValue = getTime(b.workout.createdAt);
+        break;
+      case 'team':
+        aValue = (a.team?.name || '').toLowerCase();
+        bValue = (b.team?.name || '').toLowerCase();
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const toggleVideoExpansion = (workoutId: string) => {
+    setExpandedWorkoutId(expandedWorkoutId === workoutId ? null : workoutId);
   };
 
   const deleteVideo = async (id: string, videoUrl: string) => {
     const ok = confirm('Delete this video and mark workout as removed?');
     if (!ok) return;
-    markDeleting(id, true);
+    setDeletingIds(prev => [...prev, id]);
     try {
       const storage = getStorage(app as any);
       let objectPath: string | null = null;
@@ -145,11 +182,14 @@ export default function VideoUploadView() {
 
       await updateDoc(doc(db, 'workouts', id), { status: 'removed', videoUrl: '' });
       setItems(prev => prev.filter(i => i.id !== id));
+      if (expandedWorkoutId === id) {
+        setExpandedWorkoutId(null);
+      }
     } catch (error) {
       console.error('Error deleting video:', error);
       alert('Failed to delete video. See console for details.');
     } finally {
-      markDeleting(id, false);
+      setDeletingIds(prev => prev.filter(x => x !== id));
     }
   };
 
@@ -180,9 +220,7 @@ export default function VideoUploadView() {
       } as any;
 
       await addDoc(collection(db, 'workouts'), newWorkout);
-      // refresh
       await loadAll();
-      // reset form
       setVideoUrl('');
       setWeight('');
       setTeamId('');
@@ -196,154 +234,223 @@ export default function VideoUploadView() {
     }
   };
 
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) {
+      return <span className="text-[#86868b]">↕</span>;
+    }
+    return sortDirection === 'asc' ? <span className="text-[#0071e3]">↑</span> : <span className="text-[#0071e3]">↓</span>;
+  };
+
   if (loading) {
     return (
-      <div className="p-6">
-        <h2 className="text-3xl font-bold mb-6">Uploaded Videos</h2>
-        <LoadingSpinner />
+      <div>
+        <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight mb-8">Uploaded Videos</h2>
+        <div className="flex justify-center items-center h-64">
+          <div className="w-8 h-8 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">Uploaded Videos</h2>
-        <div className="text-sm text-gray-600">Total: {items.length}</div>
-      </div>
-
-      {items.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <p className="text-xl">No videos found</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {items.map(item => (
-            <div key={item.id} className="bg-white rounded-xl shadow-md p-4 hover:shadow-lg transition-shadow">
-              <div className="flex items-center gap-4">
-                {/* Video */}
-                <div className="w-44 flex-shrink-0">
-                  <video
-                    src={item.workout.videoUrl}
-                    controls
-                    playsInline
-                    className="w-full aspect-video object-cover rounded-md bg-black"
-                  />
-                </div>
-
-                {/* Info */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <p className="text-lg font-semibold">{item.user?.name ?? item.workout.userId ?? 'Unknown'}</p>
-                      <p className="text-sm text-gray-600">@{item.user?.username ?? (item.workout.userId ?? 'unknown')}</p>
-                    </div>
-
-                    {item.team && (
-                      <div className="ml-2 px-2 py-1 rounded-full text-sm font-medium" style={{ background: item.team.color || '#eee' }}>
-                        {item.team.icon ?? ''} {item.team.name}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-2 text-sm text-gray-700">
-                    <span className="font-medium">Lift:</span> {item.workout.liftType ?? '—'}
-                    {typeof item.workout.weight === 'number' && (
-                      <span className="ml-4"><span className="font-medium">Weight:</span> {item.workout.weight} lbs</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="w-36 flex flex-col items-end gap-2">
-                  <div className="text-xs text-gray-500">{formatDate(item.workout.createdAt)}</div>
-                  <button
-                    onClick={() => deleteVideo(item.id, item.workout.videoUrl)}
-                    disabled={deletingIds.includes(item.id)}
-                    className={`px-4 py-2 rounded-lg font-semibold transition-all text-white ${deletingIds.includes(item.id) ? 'bg-red-300' : 'bg-red-600 hover:bg-red-700'}`}
-                  >
-                    {deletingIds.includes(item.id) ? 'Deleting...' : 'Delete'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      {/* Add Video (coaches only) */}
-      {user?.isCoach && (
-        <div className="mt-6">
-          <div className="flex justify-end">
+    <div>
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight">Uploaded Videos</h2>
+        <div className="flex items-center gap-4">
+          <div className="text-[15px] text-[#86868b]">
+            {sortedItems.length} {sortedItems.length === 1 ? 'video' : 'videos'}
+          </div>
+          {user?.isCoach && (
             <button
               onClick={() => setShowAdd(prev => !prev)}
-              className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700"
+              className="px-4 py-2 rounded-lg bg-[#0071e3] text-white text-[14px] font-medium hover:bg-[#0077ed] active:bg-[#006edb]"
             >
-              {showAdd ? 'Close' : 'Add Video'}
+              {showAdd ? 'Cancel' : 'Add Video'}
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* Add Video Form */}
+      {showAdd && (
+        <div className="mb-8 bg-[#f5f5f7] p-6 rounded-2xl border border-[#d2d2d7]">
+          <h3 className="text-[20px] font-semibold text-[#1d1d1f] mb-4">Add New Video</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">Video URL</label>
+              <input
+                type="text"
+                value={videoUrl}
+                onChange={e => setVideoUrl(e.target.value)}
+                className="w-full px-4 py-3 bg-white border border-[#d2d2d7] rounded-xl text-[15px] focus:outline-none focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+                placeholder="https://..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">Lift Type</label>
+              <select
+                value={liftType}
+                onChange={e => setLiftType(e.target.value as any)}
+                className="w-full px-4 py-3 bg-white border border-[#d2d2d7] rounded-xl text-[15px] focus:outline-none focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+              >
+                <option value="bench">Bench Press</option>
+                <option value="squat">Squat</option>
+                <option value="deadlift">Deadlift</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">Weight (lbs)</label>
+              <input
+                type="number"
+                value={weight as any}
+                onChange={e => setWeight(e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full px-4 py-3 bg-white border border-[#d2d2d7] rounded-xl text-[15px] focus:outline-none focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+                placeholder="e.g., 225"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">Team</label>
+              <select
+                value={teamId}
+                onChange={e => setTeamId(e.target.value)}
+                className="w-full px-4 py-3 bg-white border border-[#d2d2d7] rounded-xl text-[15px] focus:outline-none focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+              >
+                <option value="">Select team...</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {showAdd && (
-            <div className="mt-4 bg-white p-4 rounded-lg shadow-sm">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Video URL</label>
-                  <input
-                    type="text"
-                    value={videoUrl}
-                    onChange={e => setVideoUrl(e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="https://..."
-                  />
-                </div>
+          <div className="mt-6 flex gap-3 justify-end">
+            <button
+              onClick={() => setShowAdd(false)}
+              className="px-5 py-2.5 rounded-xl bg-white text-[#1d1d1f] text-[14px] font-medium border border-[#d2d2d7] hover:bg-[#f5f5f7]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={creating}
+              className={`px-5 py-2.5 rounded-xl text-white text-[14px] font-medium ${
+                creating ? 'bg-[#86868b] cursor-not-allowed' : 'bg-[#0071e3] hover:bg-[#0077ed]'
+              }`}
+            >
+              {creating ? 'Adding...' : 'Add Video'}
+            </button>
+          </div>
+        </div>
+      )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Lift Type</label>
-                  <select value={liftType} onChange={e => setLiftType(e.target.value as any)} className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2">
-                    <option value="bench">Bench</option>
-                    <option value="squat">Squat</option>
-                    <option value="deadlift">Deadlift</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Weight (lbs)</label>
-                  <input
-                    type="number"
-                    value={weight as any}
-                    onChange={e => setWeight(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="e.g., 225"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Team</label>
-                  <select value={teamId} onChange={e => setTeamId(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2">
-                    <option value="">(none)</option>
-                    {teams.map(t => (
-                      <option key={t.id} value={t.id}>{t.icon ?? ''} {t.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-2 justify-end">
-                <button
-                  onClick={() => { setShowAdd(false); }}
-                  className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreate}
-                  disabled={creating}
-                  className={`px-4 py-2 rounded-lg text-white ${creating ? 'bg-green-300' : 'bg-green-600 hover:bg-green-700'}`}
-                >
-                  {creating ? 'Adding...' : 'Add Video'}
-                </button>
-              </div>
+      {/* Videos Table */}
+      {sortedItems.length === 0 ? (
+        <div className="text-center py-20 text-[#86868b]">
+          <p className="text-[17px]">No videos found</p>
+        </div>
+      ) : (
+        <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-6 gap-4 px-6 py-4 bg-[#f5f5f7] border-b border-[#d2d2d7]">
+            <button
+              onClick={() => handleSort('userName')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              User <SortIcon field="userName" />
+            </button>
+            <button
+              onClick={() => handleSort('liftType')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Lift Type <SortIcon field="liftType" />
+            </button>
+            <button
+              onClick={() => handleSort('weight')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Weight <SortIcon field="weight" />
+            </button>
+            <button
+              onClick={() => handleSort('team')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Team <SortIcon field="team" />
+            </button>
+            <button
+              onClick={() => handleSort('createdAt')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Date <SortIcon field="createdAt" />
+            </button>
+            <div className="text-left text-[14px] font-semibold text-[#1d1d1f]">
+              Actions
             </div>
-          )}
+          </div>
+
+          {/* Table Body */}
+          {sortedItems.map((item, index) => {
+            const isEven = index % 2 === 0;
+            const isDeleting = deletingIds.includes(item.id);
+            const isExpanded = expandedWorkoutId === item.id;
+            return (
+              <div key={item.id}>
+                <div
+                  className={`grid grid-cols-6 gap-4 px-6 py-4 ${
+                    isEven ? 'bg-white' : 'bg-[#f5f5f7]'
+                  } hover:bg-[#e8e8ed] transition-colors cursor-pointer`}
+                  onClick={() => toggleVideoExpansion(item.id)}
+                >
+                  <div className="text-[15px] text-[#1d1d1f]">
+                    {item.user?.name || 'Unknown'}
+                  </div>
+                  <div className="text-[15px] text-[#86868b] capitalize">
+                    {item.workout.liftType}
+                  </div>
+                  <div className="text-[15px] font-medium text-[#1d1d1f]">
+                    {item.workout.weight} lbs
+                  </div>
+                  <div className="text-[15px]" style={{ color: item.team?.color || '#86868b' }}>
+                    {item.team?.name || '—'}
+                  </div>
+                  <div className="text-[15px] text-[#86868b]">
+                    {formatDate(item.workout.createdAt)}
+                  </div>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => deleteVideo(item.id, item.workout.videoUrl)}
+                      disabled={isDeleting}
+                      className={`px-4 py-2 rounded-lg text-[14px] font-medium transition-all ${
+                        isDeleting
+                          ? 'bg-[#86868b] text-white cursor-not-allowed'
+                          : 'bg-[#ff3b30] text-white hover:bg-[#ff453a] active:bg-[#ff2d20]'
+                      }`}
+                    >
+                      {isDeleting ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded Video Preview */}
+                {isExpanded && (
+                  <div className={`px-6 py-6 ${isEven ? 'bg-white' : 'bg-[#f5f5f7]'} border-t border-[#d2d2d7]`}>
+                    <div className="max-w-3xl mx-auto">
+                      <video
+                        src={item.workout.videoUrl}
+                        controls
+                        playsInline
+                        className="w-full rounded-2xl bg-black shadow-lg"
+                        style={{ maxHeight: '300px' }}
+                        autoPlay
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
