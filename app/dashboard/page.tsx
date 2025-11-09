@@ -24,8 +24,8 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-8 h-8 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -35,56 +35,56 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       <Navbar />
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-12">
         {/* Tab Navigation */}
-        <div className="flex gap-2 mb-8 bg-white p-2 rounded-lg shadow-sm">
+        <div className="flex gap-3 mb-10 p-2 bg-[#f5f5f7] rounded-2xl">
           <button
             onClick={() => setActiveTab('leaderboard')}
-            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+            className={`flex-1 px-6 py-3.5 rounded-xl text-[15px] font-medium transition-all ${
               activeTab === 'leaderboard'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-gray-700 hover:bg-gray-100'
+                ? 'bg-white text-[#1d1d1f] shadow-sm'
+                : 'text-[#86868b] hover:text-[#1d1d1f]'
             }`}
           >
-            🏆 Leaderboard
+            Leaderboard
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+            className={`flex-1 px-6 py-3.5 rounded-xl text-[15px] font-medium transition-all ${
               activeTab === 'users'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-gray-700 hover:bg-gray-100'
+                ? 'bg-white text-[#1d1d1f] shadow-sm'
+                : 'text-[#86868b] hover:text-[#1d1d1f]'
             }`}
           >
-            👥 All Users
+            All Users
           </button>
           <button
             onClick={() => setActiveTab(prev => (prev === 'videos' ? null : 'videos'))}
-            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+            className={`flex-1 px-6 py-3.5 rounded-xl text-[15px] font-medium transition-all ${
               activeTab === 'videos'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-gray-700 hover:bg-gray-100'
+                ? 'bg-white text-[#1d1d1f] shadow-sm'
+                : 'text-[#86868b] hover:text-[#1d1d1f]'
             }`}
           >
-            🎥 Uploaded Videos
+            Videos
           </button>
           <button
             onClick={() => setActiveTab(prev => (prev === 'posts' ? null : 'posts'))}
-            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+            className={`flex-1 px-6 py-3.5 rounded-xl text-[15px] font-medium transition-all ${
               activeTab === 'posts'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-gray-700 hover:bg-gray-100'
+                ? 'bg-white text-[#1d1d1f] shadow-sm'
+                : 'text-[#86868b] hover:text-[#1d1d1f]'
             }`}
           >
-            💬 Posts
+            Posts
           </button>
         </div>
 
         {/* Content */}
-        <div className="bg-white rounded-xl shadow-lg">
+        <div className="bg-white">
           {activeTab === 'leaderboard' && <LeaderboardView />}
           {activeTab === 'users' && <UsersView />}
           {activeTab === 'videos' && <VideoUploadView />}

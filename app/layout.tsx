@@ -14,7 +14,7 @@ export default function RootLayout({
         <title>FitRank - Coaches Portal</title>
         <meta name="description" content="FitRank coaches management portal" />
       </head>
-      <body className="bg-gray-50">
+      <body>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
