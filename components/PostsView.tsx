@@ -18,6 +18,20 @@ type Post = {
   commentCount: number;
 };
 
+type Comment = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  createdAt: any;
+};
+
+type Like = {
+  userId: string;
+  userName: string;
+  createdAt: any;
+};
+
 type SortField = 'authorName' | 'text' | 'createdAt' | 'teamTag' | 'likeCount' | 'commentCount';
 type SortDirection = 'asc' | 'desc';
 
@@ -27,6 +41,13 @@ export default function PostsView() {
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+  const [postDetails, setPostDetails] = useState<{
+    comments: Comment[];
+    likes: Like[];
+    loading: boolean;
+  }>({ comments: [], likes: [], loading: false });
+  const [usersMap, setUsersMap] = useState<Map<string, User>>(new Map());
 
   useEffect(() => {
     fetchPosts();
@@ -35,6 +56,14 @@ export default function PostsView() {
   const fetchPosts = async () => {
     setLoading(true);
     try {
+      // Fetch all users first for mapping
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const userMap = new Map<string, User>();
+      usersSnap.docs.forEach(doc => {
+        userMap.set(doc.id, { id: doc.id, ...doc.data() } as User);
+      });
+      setUsersMap(userMap);
+
       const postsSnap = await getDocs(collection(db, 'posts'));
       
       const postsDataPromises = postsSnap.docs.map(async (docSnap) => {
@@ -67,6 +96,55 @@ export default function PostsView() {
       console.error('Error fetching posts:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPostDetails = async (postId: string) => {
+    setPostDetails({ comments: [], likes: [], loading: true });
+    try {
+      // Fetch comments
+      const commentsSnap = await getDocs(collection(db, `posts/${postId}/comments`));
+      const comments: Comment[] = commentsSnap.docs.map(doc => ({
+        id: doc.id,
+        authorId: doc.data().authorId || '',
+        authorName: doc.data().authorName || 'Unknown',
+        text: doc.data().text || '',
+        createdAt: doc.data().createdAt
+      })).sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bTime - aTime;
+      });
+
+      // Fetch likes
+      const likesSnap = await getDocs(collection(db, `posts/${postId}/likes`));
+      const likes: Like[] = likesSnap.docs.map(doc => {
+        const userId = doc.id;
+        const user = usersMap.get(userId);
+        return {
+          userId,
+          userName: user?.name || 'Unknown User',
+          createdAt: doc.data().createdAt
+        };
+      }).sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bTime - aTime;
+      });
+
+      setPostDetails({ comments, likes, loading: false });
+    } catch (error) {
+      console.error('Error fetching post details:', error);
+      setPostDetails({ comments: [], likes: [], loading: false });
+    }
+  };
+
+  const togglePostExpansion = (postId: string) => {
+    if (expandedPostId === postId) {
+      setExpandedPostId(null);
+    } else {
+      setExpandedPostId(postId);
+      fetchPostDetails(postId);
     }
   };
 
@@ -124,6 +202,9 @@ export default function PostsView() {
     try {
       await deleteDoc(doc(db, 'posts', id));
       setPosts(prev => prev.filter(p => p.id !== id));
+      if (expandedPostId === id) {
+        setExpandedPostId(null);
+      }
     } catch (error) {
       console.error('Error deleting post:', error);
       alert('Failed to delete post. See console for details.');
@@ -213,42 +294,113 @@ export default function PostsView() {
           {sortedPosts.map((post, index) => {
             const isEven = index % 2 === 0;
             const isDeleting = deletingIds.includes(post.id);
+            const isExpanded = expandedPostId === post.id;
             return (
-              <div
-                key={post.id}
-                className={`grid grid-cols-7 gap-4 px-6 py-4 ${
-                  isEven ? 'bg-white' : 'bg-[#f5f5f7]'
-                } hover:bg-[#e8e8ed] transition-colors`}
-              >
-                <div className="text-[15px] text-[#1d1d1f] flex flex-col">
-                  <span className="font-medium">{post.authorName}</span>
-                  <span className="text-[13px] text-[#86868b] mt-0.5">{formatDate(post.createdAt)}</span>
+              <div key={post.id}>
+                <div
+                  className={`grid grid-cols-7 gap-4 px-6 py-4 ${
+                    isEven ? 'bg-white' : 'bg-[#f5f5f7]'
+                  } hover:bg-[#e8e8ed] transition-colors cursor-pointer`}
+                  onClick={() => togglePostExpansion(post.id)}
+                >
+                  <div className="text-[15px] text-[#1d1d1f] flex flex-col">
+                    <span className="font-medium">{post.authorName}</span>
+                    <span className="text-[13px] text-[#86868b] mt-0.5">{formatDate(post.createdAt)}</span>
+                  </div>
+                  <div className="col-span-2 text-[15px] text-[#1d1d1f]">
+                    <p className="line-clamp-3">{post.text}</p>
+                  </div>
+                  <div className="text-[15px] text-[#86868b]">
+                    {post.teamTag || '—'}
+                  </div>
+                  <div className="text-[15px] font-medium text-[#1d1d1f]">
+                    {post.likeCount}
+                  </div>
+                  <div className="text-[15px] font-medium text-[#1d1d1f]">
+                    {post.commentCount}
+                  </div>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => deletePost(post.id)}
+                      disabled={isDeleting}
+                      className={`px-4 py-2 rounded-lg text-[14px] font-medium transition-all ${
+                        isDeleting
+                          ? 'bg-[#86868b] text-white cursor-not-allowed'
+                          : 'bg-[#ff3b30] text-white hover:bg-[#ff453a] active:bg-[#ff2d20]'
+                      }`}
+                    >
+                      {isDeleting ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
                 </div>
-                <div className="col-span-2 text-[15px] text-[#1d1d1f]">
-                  <p className="line-clamp-3">{post.text}</p>
-                </div>
-                <div className="text-[15px] text-[#86868b]">
-                  {post.teamTag || '—'}
-                </div>
-                <div className="text-[15px] font-medium text-[#1d1d1f]">
-                  {post.likeCount}
-                </div>
-                <div className="text-[15px] font-medium text-[#1d1d1f]">
-                  {post.commentCount}
-                </div>
-                <div>
-                  <button
-                    onClick={() => deletePost(post.id)}
-                    disabled={isDeleting}
-                    className={`px-4 py-2 rounded-lg text-[14px] font-medium transition-all ${
-                      isDeleting
-                        ? 'bg-[#86868b] text-white cursor-not-allowed'
-                        : 'bg-[#ff3b30] text-white hover:bg-[#ff453a] active:bg-[#ff2d20]'
-                    }`}
-                  >
-                    {isDeleting ? 'Deleting...' : 'Delete'}
-                  </button>
-                </div>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className={`px-6 py-6 ${isEven ? 'bg-white' : 'bg-[#f5f5f7]'} border-t border-[#d2d2d7]`}>
+                    {postDetails.loading ? (
+                      <div className="flex justify-center py-8">
+                        <div className="w-6 h-6 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-6">
+                        {/* Likes Section */}
+                        <div>
+                          <h3 className="text-[17px] font-semibold text-[#1d1d1f] mb-4">
+                            Likes ({postDetails.likes.length})
+                          </h3>
+                          {postDetails.likes.length === 0 ? (
+                            <p className="text-[14px] text-[#86868b]">No likes yet</p>
+                          ) : (
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                              {postDetails.likes.map((like, idx) => (
+                                <div
+                                  key={idx}
+                                  className="p-3 bg-white border border-[#d2d2d7] rounded-xl"
+                                >
+                                  <p className="text-[15px] font-medium text-[#1d1d1f]">
+                                    {like.userName}
+                                  </p>
+                                  <p className="text-[13px] text-[#86868b] mt-0.5">
+                                    {formatDate(like.createdAt)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Comments Section */}
+                        <div>
+                          <h3 className="text-[17px] font-semibold text-[#1d1d1f] mb-4">
+                            Comments ({postDetails.comments.length})
+                          </h3>
+                          {postDetails.comments.length === 0 ? (
+                            <p className="text-[14px] text-[#86868b]">No comments yet</p>
+                          ) : (
+                            <div className="space-y-3 max-h-64 overflow-y-auto">
+                              {postDetails.comments.map((comment) => (
+                                <div
+                                  key={comment.id}
+                                  className="p-3 bg-white border border-[#d2d2d7] rounded-xl"
+                                >
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="text-[15px] font-medium text-[#1d1d1f]">
+                                      {comment.authorName}
+                                    </p>
+                                    <p className="text-[12px] text-[#86868b]">
+                                      {formatDate(comment.createdAt)}
+                                    </p>
+                                  </div>
+                                  <p className="text-[14px] text-[#1d1d1f]">{comment.text}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
