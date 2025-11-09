@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { User, Team } from '@/lib/types';
 
@@ -13,6 +13,8 @@ interface ExtendedUser extends User {
   workoutsCount: number;
 }
 
+type ActionModalType = 'tokens' | 'username' | 'name' | 'team' | null;
+
 export default function UsersView() {
   const [users, setUsers] = useState<ExtendedUser[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -22,6 +24,13 @@ export default function UsersView() {
   const [filterRole, setFilterRole] = useState<'all' | 'coaches' | 'athletes'>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  
+  // Action menu state
+  const [activeMenuUserId, setActiveMenuUserId] = useState<string | null>(null);
+  const [modalType, setModalType] = useState<ActionModalType>(null);
+  const [selectedUser, setSelectedUser] = useState<ExtendedUser | null>(null);
+  const [modalValue, setModalValue] = useState<string>('');
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -83,6 +92,75 @@ export default function UsersView() {
     } else {
       setSortField(field);
       setSortDirection('asc');
+    }
+  };
+
+  const openActionModal = (user: ExtendedUser, type: ActionModalType) => {
+    setSelectedUser(user);
+    setModalType(type);
+    setActiveMenuUserId(null);
+    
+    // Pre-fill modal with current values
+    if (type === 'tokens') {
+      setModalValue(user.tokens.toString());
+    } else if (type === 'username') {
+      setModalValue(user.username);
+    } else if (type === 'name') {
+      setModalValue(user.name);
+    } else if (type === 'team') {
+      const teamId = user.team.split('/').pop() || '';
+      setModalValue(teamId);
+    }
+  };
+
+  const closeModal = () => {
+    setModalType(null);
+    setSelectedUser(null);
+    setModalValue('');
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedUser || !modalType) return;
+
+    setUpdating(true);
+    try {
+      const userRef = doc(db, 'users', selectedUser.id);
+      
+      if (modalType === 'tokens') {
+        const tokens = parseInt(modalValue);
+        if (isNaN(tokens)) {
+          alert('Please enter a valid number');
+          return;
+        }
+        await updateDoc(userRef, { tokens });
+      } else if (modalType === 'username') {
+        if (!modalValue.trim()) {
+          alert('Username cannot be empty');
+          return;
+        }
+        await updateDoc(userRef, { username: modalValue.trim() });
+      } else if (modalType === 'name') {
+        if (!modalValue.trim()) {
+          alert('Name cannot be empty');
+          return;
+        }
+        await updateDoc(userRef, { name: modalValue.trim() });
+      } else if (modalType === 'team') {
+        if (!modalValue) {
+          alert('Please select a team');
+          return;
+        }
+        await updateDoc(userRef, { team: `teams/${modalValue}` });
+      }
+
+      // Refresh data
+      await fetchData();
+      closeModal();
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Failed to update user. See console for details.');
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -202,7 +280,7 @@ export default function UsersView() {
       ) : (
         <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
           {/* Table Header */}
-          <div className="grid grid-cols-6 gap-4 px-6 py-4 bg-[#f5f5f7] border-b border-[#d2d2d7]">
+          <div className="grid grid-cols-7 gap-4 px-6 py-4 bg-[#f5f5f7] border-b border-[#d2d2d7]">
             <button
               onClick={() => handleSort('username')}
               className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
@@ -239,16 +317,20 @@ export default function UsersView() {
             >
               Workouts <SortIcon field="workouts" />
             </button>
+            <div className="text-left text-[14px] font-semibold text-[#1d1d1f]">
+              Actions
+            </div>
           </div>
 
           {/* Table Body */}
           {sortedUsers.map((user, index) => {
             const team = getTeamById(user.team);
             const isEven = index % 2 === 0;
+            const isMenuOpen = activeMenuUserId === user.id;
             return (
               <div
                 key={user.id}
-                className={`grid grid-cols-6 gap-4 px-6 py-4 ${
+                className={`grid grid-cols-7 gap-4 px-6 py-4 ${
                   isEven ? 'bg-white' : 'bg-[#f5f5f7]'
                 } hover:bg-[#e8e8ed] transition-colors`}
               >
@@ -267,9 +349,131 @@ export default function UsersView() {
                 <div className="text-[15px] font-medium text-[#1d1d1f]">{user.tokens}</div>
                 <div className="text-[15px] text-[#86868b]">{user.friendsCount}</div>
                 <div className="text-[15px] text-[#86868b]">{user.workoutsCount}</div>
+                <div className="relative">
+                  <button
+                    onClick={() => setActiveMenuUserId(isMenuOpen ? null : user.id)}
+                    className="px-3 py-1.5 text-[#1d1d1f] hover:bg-[#d2d2d7] rounded-lg transition-colors text-[18px] font-bold"
+                  >
+                    ⋯
+                  </button>
+                  
+                  {isMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setActiveMenuUserId(null)}
+                      />
+                      <div className="absolute right-0 mt-1 w-48 bg-white border border-[#d2d2d7] rounded-xl shadow-lg z-20 overflow-hidden">
+                        <button
+                          onClick={() => openActionModal(user, 'tokens')}
+                          className="w-full text-left px-4 py-3 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
+                        >
+                          Modify Tokens
+                        </button>
+                        <button
+                          onClick={() => openActionModal(user, 'username')}
+                          className="w-full text-left px-4 py-3 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7]"
+                        >
+                          Change Username
+                        </button>
+                        <button
+                          onClick={() => openActionModal(user, 'name')}
+                          className="w-full text-left px-4 py-3 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7]"
+                        >
+                          Change Name
+                        </button>
+                        <button
+                          onClick={() => openActionModal(user, 'team')}
+                          className="w-full text-left px-4 py-3 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7]"
+                        >
+                          Change Team
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Action Modal */}
+      {modalType && selectedUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 border-b border-[#d2d2d7]">
+              <h3 className="text-[20px] font-semibold text-[#1d1d1f]">
+                {modalType === 'tokens' && 'Modify Tokens'}
+                {modalType === 'username' && 'Change Username'}
+                {modalType === 'name' && 'Change Name'}
+                {modalType === 'team' && 'Change Team'}
+              </h3>
+              <p className="text-[14px] text-[#86868b] mt-1">
+                {selectedUser.name} (@{selectedUser.username})
+              </p>
+            </div>
+            
+            <div className="p-6">
+              {modalType === 'team' ? (
+                <div>
+                  <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">
+                    Select Team
+                  </label>
+                  <select
+                    value={modalValue}
+                    onChange={(e) => setModalValue(e.target.value)}
+                    className="w-full px-4 py-3 bg-[#f5f5f7] border border-transparent rounded-xl text-[15px] text-[#1d1d1f] focus:outline-none focus:bg-white focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+                  >
+                    <option value="">Select a team...</option>
+                    {teams.map(team => (
+                      <option key={team.id} value={team.id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">
+                    {modalType === 'tokens' && 'New Token Amount'}
+                    {modalType === 'username' && 'New Username'}
+                    {modalType === 'name' && 'New Name'}
+                  </label>
+                  <input
+                    type={modalType === 'tokens' ? 'number' : 'text'}
+                    value={modalValue}
+                    onChange={(e) => setModalValue(e.target.value)}
+                    className="w-full px-4 py-3 bg-[#f5f5f7] border border-transparent rounded-xl text-[15px] text-[#1d1d1f] focus:outline-none focus:bg-white focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+                    placeholder={
+                      modalType === 'tokens' ? 'Enter token amount' :
+                      modalType === 'username' ? 'Enter new username' :
+                      'Enter new name'
+                    }
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-[#d2d2d7] flex gap-3 justify-end">
+              <button
+                onClick={closeModal}
+                disabled={updating}
+                className="px-5 py-2.5 rounded-xl bg-[#f5f5f7] text-[#1d1d1f] text-[14px] font-medium hover:bg-[#e8e8ed] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdate}
+                disabled={updating}
+                className={`px-5 py-2.5 rounded-xl text-white text-[14px] font-medium ${
+                  updating ? 'bg-[#86868b] cursor-not-allowed' : 'bg-[#0071e3] hover:bg-[#0077ed]'
+                }`}
+              >
+                {updating ? 'Updating...' : 'Update'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
