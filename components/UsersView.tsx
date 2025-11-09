@@ -5,13 +5,23 @@ import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { User, Team } from '@/lib/types';
 
+type SortField = 'username' | 'name' | 'team' | 'tokens' | 'friends' | 'workouts';
+type SortDirection = 'asc' | 'desc';
+
+interface ExtendedUser extends User {
+  friendsCount: number;
+  workoutsCount: number;
+}
+
 export default function UsersView() {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<ExtendedUser[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTeam, setFilterTeam] = useState<string>('all');
   const [filterRole, setFilterRole] = useState<'all' | 'coaches' | 'athletes'>('all');
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   useEffect(() => {
     fetchData();
@@ -29,7 +39,31 @@ export default function UsersView() {
       const usersRef = collection(db, 'users');
       const q = query(usersRef, orderBy('name'));
       const snapshot = await getDocs(q);
-      const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      
+      // Fetch additional data for each user
+      const usersDataPromises = snapshot.docs.map(async (doc) => {
+        const userData = { id: doc.id, ...doc.data() } as User;
+        
+        // Get friends count
+        const friendsSnap = await getDocs(collection(db, `users/${doc.id}/friends`));
+        const friendsCount = friendsSnap.size;
+        
+        // Get workouts count
+        const workoutsQuery = query(
+          collection(db, 'workouts'),
+          where('userId', '==', doc.id)
+        );
+        const workoutsSnap = await getDocs(workoutsQuery);
+        const workoutsCount = workoutsSnap.size;
+        
+        return {
+          ...userData,
+          friendsCount,
+          workoutsCount
+        } as ExtendedUser;
+      });
+      
+      const usersData = await Promise.all(usersDataPromises);
       setUsers(usersData);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -43,6 +77,15 @@ export default function UsersView() {
     return teams.find(t => t.id === teamId);
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.username.toLowerCase().includes(searchTerm.toLowerCase());
@@ -53,12 +96,59 @@ export default function UsersView() {
     return matchesSearch && matchesTeam && matchesRole;
   });
 
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+
+    switch (sortField) {
+      case 'username':
+        aValue = a.username.toLowerCase();
+        bValue = b.username.toLowerCase();
+        break;
+      case 'name':
+        aValue = a.name.toLowerCase();
+        bValue = b.name.toLowerCase();
+        break;
+      case 'team':
+        const aTeam = getTeamById(a.team);
+        const bTeam = getTeamById(b.team);
+        aValue = aTeam?.name.toLowerCase() || '';
+        bValue = bTeam?.name.toLowerCase() || '';
+        break;
+      case 'tokens':
+        aValue = a.tokens;
+        bValue = b.tokens;
+        break;
+      case 'friends':
+        aValue = a.friendsCount;
+        bValue = b.friendsCount;
+        break;
+      case 'workouts':
+        aValue = a.workoutsCount;
+        bValue = b.workoutsCount;
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) {
+      return <span className="text-[#86868b]">↕</span>;
+    }
+    return sortDirection === 'asc' ? <span className="text-[#0071e3]">↑</span> : <span className="text-[#0071e3]">↓</span>;
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight">All Users</h2>
         <div className="text-[15px] text-[#86868b]">
-          {filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'}
+          {sortedUsers.length} {sortedUsers.length === 1 ? 'user' : 'users'}
         </div>
       </div>
 
@@ -99,57 +189,84 @@ export default function UsersView() {
         </select>
       </div>
 
-      {/* Users List */}
+      {/* Users Table */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="w-8 h-8 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
         </div>
-      ) : filteredUsers.length === 0 ? (
+      ) : sortedUsers.length === 0 ? (
         <div className="text-center py-20 text-[#86868b]">
           <p className="text-[17px]">No users found</p>
           <p className="text-[14px] mt-2">Try adjusting your filters</p>
         </div>
       ) : (
         <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
-          {filteredUsers.map((user, index) => {
+          {/* Table Header */}
+          <div className="grid grid-cols-6 gap-4 px-6 py-4 bg-[#f5f5f7] border-b border-[#d2d2d7]">
+            <button
+              onClick={() => handleSort('username')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Username <SortIcon field="username" />
+            </button>
+            <button
+              onClick={() => handleSort('name')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Name <SortIcon field="name" />
+            </button>
+            <button
+              onClick={() => handleSort('team')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Team <SortIcon field="team" />
+            </button>
+            <button
+              onClick={() => handleSort('tokens')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Tokens <SortIcon field="tokens" />
+            </button>
+            <button
+              onClick={() => handleSort('friends')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Friends <SortIcon field="friends" />
+            </button>
+            <button
+              onClick={() => handleSort('workouts')}
+              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+            >
+              Workouts <SortIcon field="workouts" />
+            </button>
+          </div>
+
+          {/* Table Body */}
+          {sortedUsers.map((user, index) => {
             const team = getTeamById(user.team);
+            const isEven = index % 2 === 0;
             return (
               <div
                 key={user.id}
-                className={`flex items-center gap-4 px-6 py-5 hover:bg-[#f5f5f7] transition-colors ${
-                  index !== filteredUsers.length - 1 ? 'border-b border-[#d2d2d7]' : ''
-                }`}
+                className={`grid grid-cols-6 gap-4 px-6 py-4 ${
+                  isEven ? 'bg-white' : 'bg-[#f5f5f7]'
+                } hover:bg-[#e8e8ed] transition-colors`}
               >
-                {/* User Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="font-semibold text-[17px] text-[#1d1d1f]">{user.name}</h3>
-                    {user.isCoach && (
-                      <span className="px-2.5 py-0.5 text-[12px] font-medium text-[#0071e3] bg-[#0071e3]/10 rounded-full">
-                        Coach
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-[14px] text-[#86868b]">
-                    <span>@{user.username}</span>
-                    {team && (
-                      <>
-                        <span>•</span>
-                        <span style={{ color: team.color }}>
-                          {team.name}
-                        </span>
-                      </>
-                    )}
-                  </div>
+                <div className="text-[15px] text-[#1d1d1f] flex items-center">
+                  @{user.username}
+                  {user.isCoach && (
+                    <span className="ml-2 px-2 py-0.5 text-[11px] font-medium text-[#0071e3] bg-[#0071e3]/10 rounded-full">
+                      Coach
+                    </span>
+                  )}
                 </div>
-
-                {/* Tokens */}
-                <div className="text-right">
-                  <p className="text-[17px] font-semibold text-[#1d1d1f]">
-                    {user.tokens}
-                  </p>
-                  <p className="text-[13px] text-[#86868b]">tokens</p>
+                <div className="text-[15px] text-[#1d1d1f]">{user.name}</div>
+                <div className="text-[15px]" style={{ color: team?.color || '#86868b' }}>
+                  {team?.name || 'No Team'}
                 </div>
+                <div className="text-[15px] font-medium text-[#1d1d1f]">{user.tokens}</div>
+                <div className="text-[15px] text-[#86868b]">{user.friendsCount}</div>
+                <div className="text-[15px] text-[#86868b]">{user.workoutsCount}</div>
               </div>
             );
           })}
