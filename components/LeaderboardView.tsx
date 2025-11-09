@@ -125,10 +125,10 @@ export default function LeaderboardView() {
   };
 
   const getRankColor = (rank: number) => {
-    if (rank === 1) return 'from-yellow-400 to-yellow-600';
-    if (rank === 2) return 'from-gray-300 to-gray-500';
-    if (rank === 3) return 'from-orange-400 to-orange-600';
-    return 'from-blue-400 to-blue-600';
+    if (rank === 1) return 'text-yellow-500';
+    if (rank === 2) return 'text-gray-400';
+    if (rank === 3) return 'text-orange-500';
+    return 'text-[#86868b]';
   };
 
   const getRankIcon = (rank: number) => {
@@ -139,90 +139,89 @@ export default function LeaderboardView() {
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-3xl font-bold mb-6">Leaderboard</h2>
+    <div>
+      <div className="mb-8">
+        <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight mb-6">Leaderboard</h2>
 
-      {/* Score Type Toggle */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setScoreType('tokens')}
-          className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-all ${
-            scoreType === 'tokens'
-              ? 'bg-blue-600 text-white shadow-lg'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          ⭐ Tokens
-        </button>
-        <button
-          onClick={() => setScoreType('weight')}
-          className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-all ${
-            scoreType === 'weight'
-              ? 'bg-blue-600 text-white shadow-lg'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          🏋️ Weight
-        </button>
-      </div>
-
-      {/* Lift Type Selector */}
-      {scoreType === 'weight' && (
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-          {LIFT_TYPES.map(lift => (
-            <button
-              key={lift.value}
-              onClick={() => setLiftType(lift.value)}
-              className={`px-4 py-2 rounded-full font-medium whitespace-nowrap transition-all ${
-                liftType === lift.value
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {lift.icon} {lift.label}
-            </button>
-          ))}
+        {/* Score Type Toggle */}
+        <div className="flex gap-3 mb-4 bg-[#f5f5f7] p-2 rounded-2xl inline-flex">
+          <button
+            onClick={() => setScoreType('tokens')}
+            className={`px-6 py-2.5 rounded-xl text-[15px] font-medium transition-all ${
+              scoreType === 'tokens'
+                ? 'bg-white text-[#1d1d1f] shadow-sm'
+                : 'text-[#86868b] hover:text-[#1d1d1f]'
+            }`}
+          >
+            Tokens
+          </button>
+          <button
+            onClick={() => setScoreType('weight')}
+            className={`px-6 py-2.5 rounded-xl text-[15px] font-medium transition-all ${
+              scoreType === 'weight'
+                ? 'bg-white text-[#1d1d1f] shadow-sm'
+                : 'text-[#86868b] hover:text-[#1d1d1f]'
+            }`}
+          >
+            Weight
+          </button>
         </div>
-      )}
+
+        {/* Lift Type Selector */}
+        {scoreType === 'weight' && (
+          <div className="flex gap-2 mt-3">
+            {LIFT_TYPES.map(lift => (
+              <button
+                key={lift.value}
+                onClick={() => setLiftType(lift.value)}
+                className={`px-4 py-2 rounded-full text-[14px] font-medium transition-all ${
+                  liftType === lift.value
+                    ? 'bg-[#0071e3] text-white'
+                    : 'bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]'
+                }`}
+              >
+                {lift.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Leaderboard Content */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="w-8 h-8 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : leaderboard.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <p className="text-xl">No entries yet</p>
-          <p className="text-sm mt-2">Be the first to compete!</p>
+        <div className="text-center py-20 text-[#86868b]">
+          <p className="text-[17px]">No entries yet</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {leaderboard.map(entry => {
+        <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
+          {leaderboard.map((entry, index) => {
             const team = getTeamById(entry.team);
             return (
               <div
                 key={entry.id}
-                className="bg-white rounded-xl shadow-md p-4 flex items-center gap-4 hover:shadow-lg transition-shadow"
+                className={`flex items-center gap-4 px-6 py-5 hover:bg-[#f5f5f7] transition-colors ${
+                  index !== leaderboard.length - 1 ? 'border-b border-[#d2d2d7]' : ''
+                }`}
               >
-                {/* Rank Badge */}
-                <div
-                  className={`w-14 h-14 rounded-full bg-gradient-to-br ${getRankColor(
-                    entry.rank
-                  )} flex items-center justify-center text-white font-bold text-lg shadow-lg`}
-                >
+                {/* Rank */}
+                <div className={`w-12 text-center text-[17px] font-semibold ${getRankColor(entry.rank)}`}>
                   {getRankIcon(entry.rank)}
                 </div>
 
                 {/* User Info */}
-                <div className="flex-1">
-                  <p className="font-semibold text-lg">{entry.userName}</p>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span>@{entry.username}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-[17px] text-[#1d1d1f] truncate">{entry.userName}</p>
+                  <div className="flex items-center gap-2 text-[14px] text-[#86868b] mt-0.5">
+                    <span className="truncate">@{entry.username}</span>
                     {team && (
                       <>
                         <span>•</span>
-                        <span style={{ color: team.color }}>
-                          {team.icon} {team.name}
+                        <span className="truncate" style={{ color: team.color }}>
+                          {team.name}
                         </span>
                       </>
                     )}
@@ -231,12 +230,9 @@ export default function LeaderboardView() {
 
                 {/* Score */}
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-[22px] font-semibold text-[#1d1d1f]">
                     {entry.score}
-                    {scoreType === 'weight' && <span className="text-sm ml-1 text-gray-500">lbs</span>}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {scoreType === 'tokens' ? 'tokens' : LIFT_TYPES.find(l => l.value === liftType)?.label}
+                    {scoreType === 'weight' && <span className="text-[14px] ml-1 text-[#86868b]">lbs</span>}
                   </p>
                 </div>
               </div>

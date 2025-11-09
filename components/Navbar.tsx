@@ -19,22 +19,22 @@ export default function Navbar() {
   if (!user) return null;
 
   return (
-    <nav className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center">
-            <h1 className="text-2xl font-bold text-blue-600">FitRank</h1>
-            <span className="ml-3 text-sm text-gray-500">Coaches Portal</span>
+    <nav className="bg-white border-b border-[#d2d2d7]">
+      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
+        <div className="flex justify-between items-center h-16">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[22px] font-semibold text-[#1d1d1f] tracking-tight">FitRank</h1>
+            <span className="text-[14px] text-[#86868b]">Coaches Portal</span>
           </div>
           
-          <div className="flex items-center space-x-4">
-            <div className="text-sm">
-              <p className="font-medium text-gray-900">{user.name}</p>
-              <p className="text-gray-500">@{user.username}</p>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-[15px] font-medium text-[#1d1d1f]">{user.name}</p>
+              <p className="text-[13px] text-[#86868b]">@{user.username}</p>
             </div>
             <button
               onClick={handleSignOut}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+              className="px-4 py-2 text-[14px] font-medium text-white bg-[#1d1d1f] rounded-lg hover:bg-[#2d2d2f] active:bg-[#0d0d0f]"
             >
               Sign Out
             </button>

@@ -54,35 +54,35 @@ export default function UsersView() {
   });
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">All Users</h2>
-        <div className="text-sm text-gray-600">
-          Total: {filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'}
+    <div>
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight">All Users</h2>
+        <div className="text-[15px] text-[#86868b]">
+          {filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'}
         </div>
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="flex gap-3 mb-8">
         {/* Search */}
         <input
           type="text"
-          placeholder="Search by name or username..."
+          placeholder="Search users..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 px-5 py-3 bg-[#f5f5f7] border border-transparent rounded-xl text-[15px] text-[#1d1d1f] placeholder-[#86868b] focus:outline-none focus:bg-white focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
         />
 
         {/* Team Filter */}
         <select
           value={filterTeam}
           onChange={(e) => setFilterTeam(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-5 py-3 bg-[#f5f5f7] border border-transparent rounded-xl text-[15px] text-[#1d1d1f] focus:outline-none focus:bg-white focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10 cursor-pointer"
         >
           <option value="all">All Teams</option>
           {teams.map(team => (
             <option key={team.id} value={team.id}>
-              {team.icon} {team.name}
+              {team.name}
             </option>
           ))}
         </select>
@@ -91,7 +91,7 @@ export default function UsersView() {
         <select
           value={filterRole}
           onChange={(e) => setFilterRole(e.target.value as 'all' | 'coaches' | 'athletes')}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-5 py-3 bg-[#f5f5f7] border border-transparent rounded-xl text-[15px] text-[#1d1d1f] focus:outline-none focus:bg-white focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10 cursor-pointer"
         >
           <option value="all">All Roles</option>
           <option value="coaches">Coaches</option>
@@ -102,53 +102,53 @@ export default function UsersView() {
       {/* Users List */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="w-8 h-8 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : filteredUsers.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <p className="text-xl">No users found</p>
-          <p className="text-sm mt-2">Try adjusting your filters</p>
+        <div className="text-center py-20 text-[#86868b]">
+          <p className="text-[17px]">No users found</p>
+          <p className="text-[14px] mt-2">Try adjusting your filters</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredUsers.map(user => {
+        <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
+          {filteredUsers.map((user, index) => {
             const team = getTeamById(user.team);
             return (
               <div
                 key={user.id}
-                className="bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition-shadow"
+                className={`flex items-center gap-4 px-6 py-5 hover:bg-[#f5f5f7] transition-colors ${
+                  index !== filteredUsers.length - 1 ? 'border-b border-[#d2d2d7]' : ''
+                }`}
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-lg text-gray-900">{user.name}</h3>
-                    <p className="text-sm text-gray-600">@{user.username}</p>
+                {/* User Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <h3 className="font-semibold text-[17px] text-[#1d1d1f]">{user.name}</h3>
+                    {user.isCoach && (
+                      <span className="px-2.5 py-0.5 text-[12px] font-medium text-[#0071e3] bg-[#0071e3]/10 rounded-full">
+                        Coach
+                      </span>
+                    )}
                   </div>
-                  {user.isCoach && (
-                    <span className="px-2 py-1 text-xs font-semibold text-blue-600 bg-blue-100 rounded-full">
-                      Coach
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 text-[14px] text-[#86868b]">
+                    <span>@{user.username}</span>
+                    {team && (
+                      <>
+                        <span>•</span>
+                        <span style={{ color: team.color }}>
+                          {team.name}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  {team && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-500">Team:</span>
-                      <span
-                        className="text-sm font-semibold"
-                        style={{ color: team.color }}
-                      >
-                        {team.icon} {team.name}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500">Tokens:</span>
-                    <span className="text-sm font-bold text-yellow-600">
-                      ⭐ {user.tokens}
-                    </span>
-                  </div>
+                {/* Tokens */}
+                <div className="text-right">
+                  <p className="text-[17px] font-semibold text-[#1d1d1f]">
+                    {user.tokens}
+                  </p>
+                  <p className="text-[13px] text-[#86868b]">tokens</p>
                 </div>
               </div>
             );
