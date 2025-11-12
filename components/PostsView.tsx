@@ -34,6 +34,7 @@ type Like = {
 
 type SortField = 'authorName' | 'text' | 'createdAt' | 'teamTag' | 'likeCount' | 'commentCount';
 type SortDirection = 'asc' | 'desc';
+type FilterMode = 'all' | 'flagged';
 
 export default function PostsView() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -48,6 +49,20 @@ export default function PostsView() {
     loading: boolean;
   }>({ comments: [], likes: [], loading: false });
   const [usersMap, setUsersMap] = useState<Map<string, User>>(new Map());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+
+  const flaggedWords = [
+    'fuck', 'shit', 'ass', 'bitch', 'damn', 'hell', 'crap', 'bastard',
+    'dick', 'pussy', 'cock', 'cunt', 'whore', 'slut',
+    'retard', 'idiot', 'stupid', 'dumb', 'kill yourself', 'kys', 'die',
+    'hate', 'racist', 'sexist'
+  ];
+
+  const isPostFlagged = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return flaggedWords.some(word => lowerText.includes(word));
+  };
 
   useEffect(() => {
     fetchPosts();
@@ -157,7 +172,18 @@ export default function PostsView() {
     }
   };
 
-  const sortedPosts = [...posts].sort((a, b) => {
+  const filteredPosts = posts.filter(post => {
+    const matchesSearch = 
+      post.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      post.authorName.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const isFlagged = isPostFlagged(post.text);
+    const matchesFilter = filterMode === 'all' || (filterMode === 'flagged' && isFlagged);
+    
+    return matchesSearch && matchesFilter;
+  });
+
+  const sortedPosts = [...filteredPosts].sort((a, b) => {
     let aValue: any;
     let bValue: any;
 
@@ -226,6 +252,8 @@ export default function PostsView() {
     return date.toLocaleString();
   };
 
+  const flaggedCount = posts.filter(post => isPostFlagged(post.text)).length;
+
   if (loading) {
     return (
       <div>
@@ -241,15 +269,51 @@ export default function PostsView() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight">All Posts</h2>
-        <div className="text-[15px] text-[#86868b]">
-          {sortedPosts.length} {sortedPosts.length === 1 ? 'post' : 'posts'}
+        <div className="flex items-center gap-4">
+          {/* Filter Toggle */}
+          <div className="flex gap-2 bg-[#f5f5f7] p-2 rounded-xl">
+            <button
+              onClick={() => setFilterMode('all')}
+              className={`px-4 py-2 rounded-lg text-[14px] font-medium transition-all ${
+                filterMode === 'all'
+                  ? 'bg-white text-[#1d1d1f] shadow-sm'
+                  : 'text-[#86868b] hover:text-[#1d1d1f]'
+              }`}
+            >
+              All Posts
+            </button>
+            <button
+              onClick={() => setFilterMode('flagged')}
+              className={`px-4 py-2 rounded-lg text-[14px] font-medium transition-all ${
+                filterMode === 'flagged'
+                  ? 'bg-white text-[#1d1d1f] shadow-sm'
+                  : 'text-[#86868b] hover:text-[#1d1d1f]'
+              }`}
+            >
+              Flagged ({flaggedCount})
+            </button>
+          </div>
+          <div className="text-[15px] text-[#86868b]">
+            {sortedPosts.length} {sortedPosts.length === 1 ? 'post' : 'posts'}
+          </div>
         </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="mb-8">
+        <input
+          type="text"
+          placeholder="Search by text or author..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-5 py-3 bg-[#f5f5f7] border border-transparent rounded-xl text-[15px] text-[#1d1d1f] placeholder-[#86868b] focus:outline-none focus:bg-white focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+        />
       </div>
 
       {sortedPosts.length === 0 ? (
         <div className="text-center py-20 text-[#86868b]">
           <p className="text-[17px]">No posts found</p>
-          <p className="text-[14px] mt-2">Posts will appear here</p>
+          <p className="text-[14px] mt-2">{searchTerm ? 'Try a different search term' : filterMode === 'flagged' ? 'No flagged posts' : 'Posts will appear here'}</p>
         </div>
       ) : (
         <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
@@ -295,12 +359,13 @@ export default function PostsView() {
             const isEven = index % 2 === 0;
             const isDeleting = deletingIds.includes(post.id);
             const isExpanded = expandedPostId === post.id;
+            const isFlagged = isPostFlagged(post.text);
             return (
               <div key={post.id}>
                 <div
                   className={`grid grid-cols-7 gap-4 px-6 py-4 ${
                     isEven ? 'bg-white' : 'bg-[#f5f5f7]'
-                  } hover:bg-[#e8e8ed] transition-colors cursor-pointer`}
+                  } ${isFlagged ? 'border-l-4 border-l-[#ff9500]' : ''} hover:bg-[#e8e8ed] transition-colors cursor-pointer`}
                   onClick={() => togglePostExpansion(post.id)}
                 >
                   <div className="text-[15px] text-[#1d1d1f] flex flex-col">
@@ -309,6 +374,11 @@ export default function PostsView() {
                   </div>
                   <div className="col-span-2 text-[15px] text-[#1d1d1f]">
                     <p className="line-clamp-3">{post.text}</p>
+                    {isFlagged && (
+                      <span className="inline-block mt-1 px-2 py-0.5 text-[11px] font-medium text-[#ff9500] bg-[#ff9500]/10 rounded-full">
+                        ⚠️ Potentially Harmful
+                      </span>
+                    )}
                   </div>
                   <div className="text-[15px] text-[#86868b]">
                     {post.teamTag || '—'}
