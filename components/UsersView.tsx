@@ -11,6 +11,7 @@ type SortDirection = 'asc' | 'desc';
 interface ExtendedUser extends User {
   friendsCount: number;
   workoutsCount: number;
+  isSuspended?: boolean;
 }
 
 type ActionModalType = 'tokens' | 'username' | 'name' | 'team' | null;
@@ -68,11 +69,32 @@ export default function UsersView() {
         return {
           ...userData,
           friendsCount,
-          workoutsCount
+          workoutsCount,
+          isSuspended: false // Will be fetched from Auth
         } as ExtendedUser;
       });
       
       const usersData = await Promise.all(usersDataPromises);
+      
+      // Fetch suspension statuses from Firebase Auth
+      const userIds = usersData.map(u => u.id);
+      try {
+        const response = await fetch('/api/users/get-auth-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userIds })
+        });
+        
+        if (response.ok) {
+          const { userStatuses } = await response.json();
+          usersData.forEach(user => {
+            user.isSuspended = userStatuses[user.id] || false;
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching auth statuses:', error);
+      }
+      
       setUsers(usersData);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -117,6 +139,37 @@ export default function UsersView() {
     setModalType(null);
     setSelectedUser(null);
     setModalValue('');
+  };
+
+  const toggleSuspension = async (user: ExtendedUser) => {
+    const action = user.isSuspended ? 'unsuspend' : 'suspend';
+    const ok = confirm(`Are you sure you want to ${action} ${user.name}? This will ${user.isSuspended ? 'enable' : 'disable'} their Firebase Authentication account.`);
+    if (!ok) return;
+
+    setActiveMenuUserId(null);
+    setUpdating(true);
+    try {
+      const response = await fetch('/api/users/toggle-suspension', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: user.id, 
+          disabled: !user.isSuspended 
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update user');
+      }
+
+      await fetchData();
+    } catch (error: any) {
+      console.error('Error toggling suspension:', error);
+      alert('Failed to update suspension status: ' + error.message);
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const handleUpdate = async () => {
@@ -334,11 +387,16 @@ export default function UsersView() {
                   isEven ? 'bg-white' : 'bg-[#f5f5f7]'
                 } hover:bg-[#e8e8ed] transition-colors`}
               >
-                <div className="text-[15px] text-[#1d1d1f] flex items-center">
+                <div className="text-[15px] text-[#1d1d1f] flex items-center gap-2 flex-wrap">
                   @{user.username}
                   {user.isCoach && (
-                    <span className="ml-2 px-2 py-0.5 text-[11px] font-medium text-[#0071e3] bg-[#0071e3]/10 rounded-full">
+                    <span className="px-2 py-0.5 text-[11px] font-medium text-[#0071e3] bg-[#0071e3]/10 rounded-full">
                       Coach
+                    </span>
+                  )}
+                  {user.isSuspended && (
+                    <span className="px-2 py-0.5 text-[11px] font-medium text-[#ff3b30] bg-[#ff3b30]/10 rounded-full">
+                      Suspended
                     </span>
                   )}
                 </div>
@@ -387,6 +445,14 @@ export default function UsersView() {
                           className="w-full text-left px-4 py-3 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7]"
                         >
                           Change Team
+                        </button>
+                        <button
+                          onClick={() => toggleSuspension(user)}
+                          className={`w-full text-left px-4 py-3 text-[14px] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7] ${
+                            user.isSuspended ? 'text-[#34c759]' : 'text-[#ff3b30]'
+                          }`}
+                        >
+                          {user.isSuspended ? 'Unsuspend Account' : 'Suspend Account'}
                         </button>
                       </div>
                     </>
