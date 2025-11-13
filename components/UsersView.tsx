@@ -331,7 +331,7 @@ export default function UsersView() {
           <p className="text-[14px] mt-2">Try adjusting your filters</p>
         </div>
       ) : (
-        <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
+  <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-visible">
           {/* Table Header */}
           <div className="grid grid-cols-7 gap-4 px-6 py-4 bg-[#f5f5f7] border-b border-[#d2d2d7]">
             <button
@@ -382,6 +382,7 @@ export default function UsersView() {
             const isMenuOpen = activeMenuUserId === user.id;
             return (
               <div
+                id={`user-row-${user.id}`}
                 key={user.id}
                 className={`grid grid-cols-7 gap-4 px-6 py-4 ${
                   isEven ? 'bg-white' : 'bg-[#f5f5f7]'
@@ -409,7 +410,17 @@ export default function UsersView() {
                 <div className="text-[15px] text-[#86868b]">{user.workoutsCount}</div>
                 <div className="relative">
                   <button
-                    onClick={() => setActiveMenuUserId(isMenuOpen ? null : user.id)}
+                    onClick={() => {
+                      const opening = !isMenuOpen;
+                      setActiveMenuUserId(opening ? user.id : null);
+                      if (opening) {
+                        // ensure the row (and dropdown) is visible in the viewport
+                        setTimeout(() => {
+                          const el = document.getElementById(`user-row-${user.id}`);
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }, 100);
+                      }
+                    }}
                     className="px-3 py-1.5 text-[#1d1d1f] hover:bg-[#d2d2d7] rounded-lg transition-colors text-[18px] font-bold"
                   >
                     ⋯
@@ -418,10 +429,10 @@ export default function UsersView() {
                   {isMenuOpen && (
                     <>
                       <div
-                        className="fixed inset-0 z-10"
+                        className="absolute inset-0 z-40"
                         onClick={() => setActiveMenuUserId(null)}
                       />
-                      <div className="absolute right-0 mt-1 w-48 bg-white border border-[#d2d2d7] rounded-xl shadow-lg z-20 overflow-hidden">
+                      <div className="absolute right-0 mt-1 w-48 bg-white border border-[#d2d2d7] rounded-xl shadow-lg z-50 overflow-visible">
                         <button
                           onClick={() => openActionModal(user, 'tokens')}
                           className="w-full text-left px-4 py-3 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
