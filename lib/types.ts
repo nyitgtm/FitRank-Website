@@ -46,3 +46,30 @@ export interface LeaderboardEntry {
 export type LiftType = 'bench' | 'squat' | 'deadlift';
 export type ScoreType = 'tokens' | 'weight';
 export type LeaderboardTab = 'global' | 'team' | 'following';
+
+// Item Shop Types
+export type ItemCategory = 'theme' | 'avatar' | 'frame' | 'badge' | 'powerup' | 'merchandise';
+export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+export interface ShopItem {
+  id: string;
+  name: string;
+  description: string;
+  category: ItemCategory;
+  rarity: ItemRarity;
+  price: number; // in tokens
+  imageUrl: string;
+  isActive: boolean; // can be purchased
+  isFeatured: boolean;
+  availableUntil?: Date; // optional expiry timestamp
+  createdAt: Date;
+  purchaseCount: number; // for analytics
+}
+
+export interface UserPurchase {
+  id: string;
+  userId: string;
+  itemId: string;
+  purchasedAt: Date;
+  tokensSpent: number;
+}
