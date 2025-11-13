@@ -163,9 +163,11 @@ export default function ItemShopView() {
           </div>
           <button
             onClick={() => {
+              console.log('Add button clicked, showAddModal:', showAddModal);
               resetForm();
               setEditingItem(null);
               setShowAddModal(true);
+              console.log('After setState, showAddModal should be true');
             }}
             className="px-6 py-3 bg-[#0071e3] text-white rounded-xl font-medium hover:bg-[#0077ed] transition-colors"
           >
@@ -290,43 +292,54 @@ export default function ItemShopView() {
 
       {/* Add/Edit Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full my-8">
-            <div className="p-6">
-              <h2 className="text-2xl font-semibold text-[#1d1d1f] mb-6">
+        <div className="absolute inset-0 z-[100] bg-black bg-opacity-50">
+          <div className="py-8 px-4 flex justify-center">
+            <div className="bg-white rounded-xl max-w-lg w-full relative shadow-2xl h-fit">
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingItem(null);
+                  resetForm();
+                }}
+                className="absolute top-3 right-3 text-[#86868b] hover:text-[#1d1d1f] text-xl font-bold z-10"
+              >
+                ×
+              </button>
+            <div className="p-5">
+              <h2 className="text-lg font-semibold text-[#1d1d1f] mb-4">
                 {editingItem ? 'Edit Item' : 'Add New Item'}
               </h2>
               
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Item Name</label>
+                  <label className="block text-xs font-medium text-[#1d1d1f] mb-1">Item Name</label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Description</label>
+                  <label className="block text-xs font-medium text-[#1d1d1f] mb-1">Description</label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3] resize-none"
-                    rows={3}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3] resize-none"
+                    rows={2}
                     required
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Category</label>
+                    <label className="block text-xs font-medium text-[#1d1d1f] mb-1">Category</label>
                     <select
                       value={formData.category}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value as ItemCategory })}
-                      className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                     >
                       {categories.map(cat => (
                         <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
@@ -335,11 +348,11 @@ export default function ItemShopView() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Rarity</label>
+                    <label className="block text-xs font-medium text-[#1d1d1f] mb-1">Rarity</label>
                     <select
                       value={formData.rarity}
                       onChange={(e) => setFormData({ ...formData, rarity: e.target.value as ItemRarity })}
-                      className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                     >
                       {rarities.map(rar => (
                         <option key={rar} value={rar}>{rar.charAt(0).toUpperCase() + rar.slice(1)}</option>
@@ -349,36 +362,36 @@ export default function ItemShopView() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Price (Tokens)</label>
+                  <label className="block text-xs font-medium text-[#1d1d1f] mb-1">Price (Tokens)</label>
                   <input
                     type="number"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) || 0 })}
-                    className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                     min="0"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Image URL</label>
+                  <label className="block text-xs font-medium text-[#1d1d1f] mb-1">Image URL</label>
                   <input
                     type="url"
                     value={formData.imageUrl}
                     onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                     placeholder="https://example.com/image.jpg"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Available Until (Optional)</label>
+                  <label className="block text-xs font-medium text-[#1d1d1f] mb-1">Available Until (Optional)</label>
                   <input
                     type="datetime-local"
                     value={formData.availableUntil}
                     onChange={(e) => setFormData({ ...formData, availableUntil: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#d2d2d7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                   />
                 </div>
 
@@ -390,7 +403,7 @@ export default function ItemShopView() {
                       onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                       className="w-4 h-4 text-[#0071e3] rounded focus:ring-[#0071e3]"
                     />
-                    <span className="text-sm text-[#1d1d1f]">Active (Available for purchase)</span>
+                    <span className="text-xs text-[#1d1d1f]">Active</span>
                   </label>
 
                   <label className="flex items-center gap-2">
@@ -400,11 +413,11 @@ export default function ItemShopView() {
                       onChange={(e) => setFormData({ ...formData, isFeatured: e.target.checked })}
                       className="w-4 h-4 text-[#0071e3] rounded focus:ring-[#0071e3]"
                     />
-                    <span className="text-sm text-[#1d1d1f]">Featured</span>
+                    <span className="text-xs text-[#1d1d1f]">Featured</span>
                   </label>
                 </div>
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex gap-2 pt-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -412,19 +425,20 @@ export default function ItemShopView() {
                       setEditingItem(null);
                       resetForm();
                     }}
-                    className="flex-1 px-6 py-3 bg-[#f5f5f7] text-[#1d1d1f] rounded-xl font-medium hover:bg-[#e8e8ed] transition-colors"
+                    className="flex-1 px-4 py-2 bg-[#f5f5f7] text-[#1d1d1f] rounded-lg text-sm font-medium hover:bg-[#e8e8ed] transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-6 py-3 bg-[#0071e3] text-white rounded-xl font-medium hover:bg-[#0077ed] transition-colors"
+                    className="flex-1 px-4 py-2 bg-[#0071e3] text-white rounded-lg text-sm font-medium hover:bg-[#0077ed] transition-colors"
                   >
-                    {editingItem ? 'Update Item' : 'Add Item'}
+                    {editingItem ? 'Update' : 'Add'}
                   </button>
                 </div>
               </form>
             </div>
+          </div>
           </div>
         </div>
       )}
