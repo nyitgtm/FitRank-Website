@@ -26,7 +26,7 @@ export default function ItemShopView() {
     availableUntil: '',
   });
 
-  const categories: ItemCategory[] = ['theme', 'avatar', 'frame', 'badge', 'powerup'];
+  const categories: ItemCategory[] = ['theme', 'avatar', 'frame', 'badge', 'powerup', 'merchandise'];
   const rarities: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
 
   const rarityColors = {
