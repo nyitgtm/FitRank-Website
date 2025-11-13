@@ -229,24 +229,26 @@ export default function ItemShopView() {
                   No Image
                 </div>
               )}
-              {item.isFeatured && (
-                <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">
-                  ⭐
-                </div>
-              )}
               {!item.isActive && (
                 <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">
                   ✕
                 </div>
               )}
-              <span className={`absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold shadow-sm ${rarityColors[item.rarity]}`}>
-                {item.rarity.toUpperCase()}
-              </span>
             </div>
 
             {/* Item Details */}
             <div className="p-3">
-              <h3 className="font-semibold text-[#1d1d1f] text-sm mb-1 truncate">{item.name}</h3>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-semibold text-[#1d1d1f] text-sm truncate">{item.name}</h3>
+                <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                  {item.isFeatured && (
+                    <span className="text-[12px]">⭐</span>
+                  )}
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${rarityColors[item.rarity]}`}>
+                    {item.rarity.toUpperCase()}
+                  </span>
+                </div>
+              </div>
               <p className="text-[#86868b] text-xs mb-2 line-clamp-2 min-h-[2rem]">{item.description}</p>
               
               <div className="flex items-center justify-between mb-2">
