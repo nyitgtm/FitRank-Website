@@ -215,68 +215,66 @@ export default function ItemShopView() {
       </div>
 
       {/* Items Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         {filteredItems.map(item => (
-          <div key={item.id} className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden hover:shadow-lg transition-shadow">
+          <div key={item.id} className="bg-white border-2 border-[#d2d2d7] rounded-xl overflow-hidden hover:shadow-lg hover:border-[#0071e3] transition-all">
             {/* Item Image */}
-            <div className="h-[100px] bg-[#f5f5f7] relative flex items-center justify-center">
+            <div className="h-[120px] bg-[#f5f5f7] relative flex items-center justify-center p-2">
               {item.imageUrl ? (
-                <img src={item.imageUrl} alt={item.name} className="max-w-[100px] max-h-[100px] object-contain" />
+                <img src={item.imageUrl} alt={item.name} className="max-w-full max-h-full object-contain" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-[#86868b]">
+                <div className="w-full h-full flex items-center justify-center text-[#86868b] text-xs">
                   No Image
                 </div>
               )}
               {item.isFeatured && (
-                <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-xs font-semibold">
-                  ⭐ Featured
+                <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">
+                  ⭐
                 </div>
               )}
               {!item.isActive && (
-                <div className="absolute top-3 left-3 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-semibold">
-                  Inactive
+                <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">
+                  ✕
                 </div>
               )}
+              <span className={`absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold shadow-sm ${rarityColors[item.rarity]}`}>
+                {item.rarity.toUpperCase()}
+              </span>
             </div>
 
             {/* Item Details */}
-            <div className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <h3 className="font-semibold text-[#1d1d1f] text-lg">{item.name}</h3>
-                <span className={`px-2 py-1 rounded-lg text-xs font-medium ${rarityColors[item.rarity]}`}>
-                  {item.rarity}
-                </span>
-              </div>
-              <p className="text-[#86868b] text-sm mb-3 line-clamp-2">{item.description}</p>
+            <div className="p-3">
+              <h3 className="font-semibold text-[#1d1d1f] text-sm mb-1 truncate">{item.name}</h3>
+              <p className="text-[#86868b] text-xs mb-2 line-clamp-2 min-h-[2rem]">{item.description}</p>
               
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[#0071e3] font-semibold text-lg">{item.price} 🪙</span>
-                <span className="text-[#86868b] text-xs">{item.category}</span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[#0071e3] font-bold text-base">{item.price} 🪙</span>
+                <span className="text-[#86868b] text-[10px] uppercase tracking-wide">{item.category}</span>
               </div>
 
               {item.availableUntil && (
-                <p className="text-xs text-red-600 mb-3">
-                  Expires: {new Date(item.availableUntil).toLocaleDateString()}
+                <p className="text-[10px] text-red-600 mb-2 font-medium">
+                  ⏰ {new Date(item.availableUntil).toLocaleDateString()}
                 </p>
               )}
 
-              <div className="text-xs text-[#86868b] mb-3">
-                {item.purchaseCount} purchases
+              <div className="text-[10px] text-[#86868b] mb-2">
+                📊 {item.purchaseCount} purchases
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <button
                   onClick={() => handleEdit(item)}
-                  className="flex-1 px-3 py-2 bg-[#f5f5f7] text-[#1d1d1f] rounded-lg text-sm font-medium hover:bg-[#e8e8ed] transition-colors"
+                  className="flex-1 px-2 py-1.5 bg-[#0071e3] text-white rounded-lg text-xs font-medium hover:bg-[#0077ed] transition-colors"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => handleDelete(item.id)}
-                  className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors"
+                  className="px-2 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 transition-colors"
                 >
-                  Delete
+                  🗑️
                 </button>
               </div>
             </div>
@@ -292,8 +290,8 @@ export default function ItemShopView() {
 
       {/* Add/Edit Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full my-8">
             <div className="p-6">
               <h2 className="text-2xl font-semibold text-[#1d1d1f] mb-6">
                 {editingItem ? 'Edit Item' : 'Add New Item'}
