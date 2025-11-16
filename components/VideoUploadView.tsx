@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, updateDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import app from '@/lib/firebase';
 import { getStorage, ref, deleteObject } from 'firebase/storage';
@@ -13,6 +13,27 @@ type WorkoutItem = {
   workout: Workout;
   user?: User;
   team?: Team;
+};
+
+type Comment = {
+  id: string;
+  content: string;
+  userID: string;
+  userName?: string;
+  timestamp: any;
+  likes: number;
+  dislikes: number;
+  replyCount: number;
+};
+
+type Reply = {
+  id: string;
+  content: string;
+  userID: string;
+  userName?: string;
+  timestamp: any;
+  likes: number;
+  dislikes: number;
 };
 
 type SortField = 'userName' | 'liftType' | 'weight' | 'createdAt' | 'team';
@@ -27,6 +48,13 @@ export default function VideoUploadView() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null);
   const { user } = useAuth();
+  const [usersMap, setUsersMap] = useState<Map<string, User>>(new Map());
+
+  // Comments state
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [replies, setReplies] = useState<Map<string, Reply[]>>(new Map());
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [expandedCommentId, setExpandedCommentId] = useState<string | null>(null);
 
   // add form state
   const [showAdd, setShowAdd] = useState(false);
@@ -62,8 +90,9 @@ export default function VideoUploadView() {
     try {
       // load users
       const usersSnap = await getDocs(collection(db, 'users'));
-      const usersMap = new Map<string, User>();
-      usersSnap.docs.forEach(u => usersMap.set(u.id, { id: u.id, ...u.data() } as User));
+      const usersMapData = new Map<string, User>();
+      usersSnap.docs.forEach(u => usersMapData.set(u.id, { id: u.id, ...u.data() } as User));
+      setUsersMap(usersMapData);
 
       // load teams
       const teamsSnap = await getDocs(collection(db, 'teams'));
@@ -91,7 +120,7 @@ export default function VideoUploadView() {
           // resolve user
           const rawUserId = (w.userId || '') as string;
           const userId = typeof rawUserId === 'string' && rawUserId.includes('/') ? rawUserId.split('/').pop() as string : rawUserId;
-          const user = usersMap.get(userId);
+          const user = usersMapData.get(userId);
 
           // resolve team: try workout.teamId, fallback to user's team
           let teamRef = (w.teamId || (user && user.team) || '') as string;
@@ -106,6 +135,65 @@ export default function VideoUploadView() {
       console.error('Error loading videos:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCommentsForWorkout = async (workoutId: string) => {
+    setLoadingComments(true);
+    try {
+      // Fetch comments
+      const commentsRef = collection(db, `workouts/${workoutId}/comments`);
+      const commentsQuery = query(commentsRef, orderBy('timestamp', 'desc'));
+      const commentsSnap = await getDocs(commentsQuery);
+      
+      const commentsData: Comment[] = [];
+      const repliesMap = new Map<string, Reply[]>();
+
+      for (const commentDoc of commentsSnap.docs) {
+        const commentData = commentDoc.data();
+        const commentUser = usersMap.get(commentData.userID);
+        
+        commentsData.push({
+          id: commentDoc.id,
+          content: commentData.content || '',
+          userID: commentData.userID || '',
+          userName: commentUser?.name || 'Unknown User',
+          timestamp: commentData.timestamp,
+          likes: commentData.likes || 0,
+          dislikes: commentData.dislikes || 0,
+          replyCount: commentData.replyCount || 0,
+        });
+
+        // Fetch replies for this comment if it has any
+        if (commentData.replyCount > 0) {
+          const repliesRef = collection(db, `workouts/${workoutId}/comments/${commentDoc.id}/replies`);
+          const repliesQuery = query(repliesRef, orderBy('timestamp', 'asc'));
+          const repliesSnap = await getDocs(repliesQuery);
+          
+          const repliesData: Reply[] = repliesSnap.docs.map(replyDoc => {
+            const replyData = replyDoc.data();
+            const replyUser = usersMap.get(replyData.userID);
+            return {
+              id: replyDoc.id,
+              content: replyData.content || '',
+              userID: replyData.userID || '',
+              userName: replyUser?.name || 'Unknown User',
+              timestamp: replyData.timestamp,
+              likes: replyData.likes || 0,
+              dislikes: replyData.dislikes || 0,
+            };
+          });
+          
+          repliesMap.set(commentDoc.id, repliesData);
+        }
+      }
+
+      setComments(commentsData);
+      setReplies(repliesMap);
+    } catch (error) {
+      console.error('Error loading comments:', error);
+    } finally {
+      setLoadingComments(false);
     }
   };
 
@@ -152,8 +240,19 @@ export default function VideoUploadView() {
     return 0;
   });
 
-  const toggleVideoExpansion = (workoutId: string) => {
-    setExpandedWorkoutId(expandedWorkoutId === workoutId ? null : workoutId);
+  const toggleVideoExpansion = async (workoutId: string) => {
+    if (expandedWorkoutId === workoutId) {
+      setExpandedWorkoutId(null);
+      setComments([]);
+      setReplies(new Map());
+    } else {
+      setExpandedWorkoutId(workoutId);
+      await loadCommentsForWorkout(workoutId);
+    }
+  };
+
+  const toggleReplies = (commentId: string) => {
+    setExpandedCommentId(expandedCommentId === commentId ? null : commentId);
   };
 
   const deleteVideo = async (id: string, videoUrl: string) => {
@@ -236,63 +335,64 @@ export default function VideoUploadView() {
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
-      return <span className="text-[#86868b]">↕</span>;
+      return <span className="text-slate-500">↕</span>;
     }
-    return sortDirection === 'asc' ? <span className="text-[#0071e3]">↑</span> : <span className="text-[#0071e3]">↓</span>;
+    return sortDirection === 'asc' ? <span className="text-indigo-400">↑</span> : <span className="text-indigo-400">↓</span>;
   };
 
   if (loading) {
     return (
-      <div>
-        <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight mb-8">Uploaded Videos</h2>
-        <div className="flex justify-center items-center h-64">
-          <div className="w-8 h-8 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
+      <div className="space-y-6">
+        <h2 className="text-4xl font-bold gradient-text">Workout Videos</h2>
+        <div className="glass-effect rounded-2xl p-12">
+          <div className="flex flex-col items-center justify-center gap-4">
+            <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-slate-400">Loading videos...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-[32px] font-semibold text-[#1d1d1f] tracking-tight">Uploaded Videos</h2>
-        <div className="flex items-center gap-4">
-          <div className="text-[15px] text-[#86868b]">
-            {sortedItems.length} {sortedItems.length === 1 ? 'video' : 'videos'}
-          </div>
-          {user?.isCoach && (
-            <button
-              onClick={() => setShowAdd(prev => !prev)}
-              className="px-4 py-2 rounded-lg bg-[#0071e3] text-white text-[14px] font-medium hover:bg-[#0077ed] active:bg-[#006edb]"
-            >
-              {showAdd ? 'Cancel' : 'Add Video'}
-            </button>
-          )}
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-4xl font-bold gradient-text mb-2">Workout Videos</h2>
+          <p className="text-slate-400">{sortedItems.length} {sortedItems.length === 1 ? 'video' : 'videos'} uploaded</p>
         </div>
+        {user?.isCoach && (
+          <button
+            onClick={() => setShowAdd(prev => !prev)}
+            className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl font-semibold shadow-lg shadow-indigo-500/30 transition-all active:scale-95"
+          >
+            {showAdd ? '✕ Cancel' : '+ Add Video'}
+          </button>
+        )}
       </div>
 
       {/* Add Video Form */}
       {showAdd && (
-        <div className="mb-8 bg-[#f5f5f7] p-6 rounded-2xl border border-[#d2d2d7]">
-          <h3 className="text-[20px] font-semibold text-[#1d1d1f] mb-4">Add New Video</h3>
+        <div className="glass-effect rounded-2xl p-6 border border-slate-700">
+          <h3 className="text-xl font-bold text-slate-100 mb-4">Add New Video</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">Video URL</label>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">Video URL</label>
               <input
                 type="text"
                 value={videoUrl}
                 onChange={e => setVideoUrl(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-[#d2d2d7] rounded-xl text-[15px] focus:outline-none focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                 placeholder="https://..."
               />
             </div>
 
             <div>
-              <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">Lift Type</label>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">Lift Type</label>
               <select
                 value={liftType}
                 onChange={e => setLiftType(e.target.value as any)}
-                className="w-full px-4 py-3 bg-white border border-[#d2d2d7] rounded-xl text-[15px] focus:outline-none focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
               >
                 <option value="bench">Bench Press</option>
                 <option value="squat">Squat</option>
@@ -301,22 +401,22 @@ export default function VideoUploadView() {
             </div>
 
             <div>
-              <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">Weight (lbs)</label>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">Weight (lbs)</label>
               <input
                 type="number"
                 value={weight as any}
                 onChange={e => setWeight(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full px-4 py-3 bg-white border border-[#d2d2d7] rounded-xl text-[15px] focus:outline-none focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                 placeholder="e.g., 225"
               />
             </div>
 
             <div>
-              <label className="block text-[14px] font-medium text-[#1d1d1f] mb-2">Team</label>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">Team</label>
               <select
                 value={teamId}
                 onChange={e => setTeamId(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-[#d2d2d7] rounded-xl text-[15px] focus:outline-none focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
               >
                 <option value="">Select team...</option>
                 {teams.map(t => (
@@ -329,18 +429,18 @@ export default function VideoUploadView() {
           <div className="mt-6 flex gap-3 justify-end">
             <button
               onClick={() => setShowAdd(false)}
-              className="px-5 py-2.5 rounded-xl bg-white text-[#1d1d1f] text-[14px] font-medium border border-[#d2d2d7] hover:bg-[#f5f5f7]"
+              className="px-6 py-3 rounded-xl bg-slate-700 text-slate-200 font-semibold hover:bg-slate-600 transition-all"
             >
               Cancel
             </button>
             <button
               onClick={handleCreate}
               disabled={creating}
-              className={`px-5 py-2.5 rounded-xl text-white text-[14px] font-medium ${
-                creating ? 'bg-[#86868b] cursor-not-allowed' : 'bg-[#0071e3] hover:bg-[#0077ed]'
+              className={`px-6 py-3 rounded-xl text-white font-semibold transition-all ${
+                creating ? 'bg-slate-600 cursor-not-allowed' : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-lg shadow-indigo-500/30'
               }`}
             >
-              {creating ? 'Adding...' : 'Add Video'}
+              {creating ? 'Adding...' : '✓ Add Video'}
             </button>
           </div>
         </div>
@@ -348,44 +448,46 @@ export default function VideoUploadView() {
 
       {/* Videos Table */}
       {sortedItems.length === 0 ? (
-        <div className="text-center py-20 text-[#86868b]">
-          <p className="text-[17px]">No videos found</p>
+        <div className="glass-effect rounded-2xl p-12 text-center">
+          <div className="text-6xl mb-4">🎥</div>
+          <p className="text-xl text-slate-300 mb-2">No videos found</p>
+          <p className="text-slate-500">Upload your first workout video</p>
         </div>
       ) : (
-        <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-hidden">
+        <div className="glass-effect rounded-2xl overflow-hidden border border-slate-700">
           {/* Table Header */}
-          <div className="grid grid-cols-6 gap-4 px-6 py-4 bg-[#f5f5f7] border-b border-[#d2d2d7]">
+          <div className="grid grid-cols-6 gap-4 px-6 py-4 bg-slate-800/50 border-b border-slate-700">
             <button
               onClick={() => handleSort('userName')}
-              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+              className="text-left text-sm font-semibold text-slate-300 hover:text-indigo-400 transition-colors flex items-center gap-1"
             >
               User <SortIcon field="userName" />
             </button>
             <button
               onClick={() => handleSort('liftType')}
-              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+              className="text-left text-sm font-semibold text-slate-300 hover:text-indigo-400 transition-colors flex items-center gap-1"
             >
               Lift Type <SortIcon field="liftType" />
             </button>
             <button
               onClick={() => handleSort('weight')}
-              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+              className="text-left text-sm font-semibold text-slate-300 hover:text-indigo-400 transition-colors flex items-center gap-1"
             >
               Weight <SortIcon field="weight" />
             </button>
             <button
               onClick={() => handleSort('team')}
-              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+              className="text-left text-sm font-semibold text-slate-300 hover:text-indigo-400 transition-colors flex items-center gap-1"
             >
               Team <SortIcon field="team" />
             </button>
             <button
               onClick={() => handleSort('createdAt')}
-              className="text-left text-[14px] font-semibold text-[#1d1d1f] hover:text-[#0071e3] transition-colors flex items-center gap-1"
+              className="text-left text-sm font-semibold text-slate-300 hover:text-indigo-400 transition-colors flex items-center gap-1"
             >
               Date <SortIcon field="createdAt" />
             </button>
-            <div className="text-left text-[14px] font-semibold text-[#1d1d1f]">
+            <div className="text-left text-sm font-semibold text-slate-300">
               Actions
             </div>
           </div>
@@ -398,53 +500,146 @@ export default function VideoUploadView() {
             return (
               <div key={item.id}>
                 <div
-                  className={`grid grid-cols-6 gap-4 px-6 py-4 ${
-                    isEven ? 'bg-white' : 'bg-[#f5f5f7]'
-                  } hover:bg-[#e8e8ed] transition-colors cursor-pointer`}
+                  className={`grid grid-cols-6 gap-4 px-6 py-4 border-b border-slate-700/50 ${
+                    isEven ? 'bg-slate-800/30' : 'bg-slate-800/10'
+                  } hover:bg-slate-700/30 transition-colors cursor-pointer`}
                   onClick={() => toggleVideoExpansion(item.id)}
                 >
-                  <div className="text-[15px] text-[#1d1d1f]">
+                  <div className="text-sm text-slate-200 font-medium">
                     {item.user?.name || 'Unknown'}
                   </div>
-                  <div className="text-[15px] text-[#86868b] capitalize">
+                  <div className="text-sm text-slate-400 capitalize">
                     {item.workout.liftType}
                   </div>
-                  <div className="text-[15px] font-medium text-[#1d1d1f]">
+                  <div className="text-sm font-bold text-amber-400">
                     {item.workout.weight} lbs
                   </div>
-                  <div className="text-[15px]" style={{ color: item.team?.color || '#86868b' }}>
+                  <div className="text-sm font-medium" style={{ color: item.team?.color || '#94a3b8' }}>
                     {item.team?.name || '—'}
                   </div>
-                  <div className="text-[15px] text-[#86868b]">
+                  <div className="text-sm text-slate-400">
                     {formatDate(item.workout.createdAt)}
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => deleteVideo(item.id, item.workout.videoUrl)}
                       disabled={isDeleting}
-                      className={`px-4 py-2 rounded-lg text-[14px] font-medium transition-all ${
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                         isDeleting
-                          ? 'bg-[#86868b] text-white cursor-not-allowed'
-                          : 'bg-[#ff3b30] text-white hover:bg-[#ff453a] active:bg-[#ff2d20]'
+                          ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/20'
                       }`}
                     >
-                      {isDeleting ? 'Deleting...' : 'Delete'}
+                      {isDeleting ? 'Deleting...' : '🗑️ Delete'}
                     </button>
                   </div>
                 </div>
 
-                {/* Expanded Video Preview */}
+                {/* Expanded Video Preview & Comments */}
                 {isExpanded && (
-                  <div className={`px-6 py-6 ${isEven ? 'bg-white' : 'bg-[#f5f5f7]'} border-t border-[#d2d2d7]`}>
-                    <div className="max-w-3xl mx-auto">
-                      <video
-                        src={item.workout.videoUrl}
-                        controls
-                        playsInline
-                        className="w-full rounded-2xl bg-black shadow-lg"
-                        style={{ maxHeight: '300px' }}
-                        autoPlay
-                      />
+                  <div className={`px-6 py-6 ${isEven ? 'bg-slate-800/30' : 'bg-slate-800/10'} border-t border-slate-700`}>
+                    <div className="max-w-4xl mx-auto space-y-6">
+                      {/* Video Player */}
+                      <div className="relative rounded-2xl overflow-hidden shadow-2xl">
+                        <video
+                          src={item.workout.videoUrl}
+                          controls
+                          playsInline
+                          className="w-full bg-black"
+                          style={{ maxHeight: '400px' }}
+                          autoPlay
+                        />
+                      </div>
+
+                      {/* Comments Section */}
+                      <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                        <h3 className="text-xl font-bold text-slate-100 mb-4 flex items-center gap-2">
+                          💬 Comments ({comments.length})
+                        </h3>
+
+                        {loadingComments ? (
+                          <div className="flex justify-center py-8">
+                            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                        ) : comments.length === 0 ? (
+                          <p className="text-slate-400 text-center py-8">No comments yet</p>
+                        ) : (
+                          <div className="space-y-4">
+                            {comments.map((comment) => {
+                              const commentReplies = replies.get(comment.id) || [];
+                              const isCommentExpanded = expandedCommentId === comment.id;
+                              
+                              return (
+                                <div key={comment.id} className="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                                  {/* Comment Header */}
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                                        <span className="text-sm font-bold text-white">
+                                          {(comment.userName || 'U')[0].toUpperCase()}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-semibold text-slate-200">{comment.userName}</p>
+                                        <p className="text-xs text-slate-500">{formatDate(comment.timestamp)}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-sm">
+                                      <span className="flex items-center gap-1 text-green-400">
+                                        👍 {comment.likes}
+                                      </span>
+                                      <span className="flex items-center gap-1 text-red-400">
+                                        👎 {comment.dislikes}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Comment Content */}
+                                  <p className="text-slate-300 mb-3 ml-13">{comment.content}</p>
+
+                                  {/* Replies Toggle */}
+                                  {comment.replyCount > 0 && (
+                                    <button
+                                      onClick={() => toggleReplies(comment.id)}
+                                      className="text-sm text-indigo-400 hover:text-indigo-300 font-semibold ml-13 flex items-center gap-1"
+                                    >
+                                      {isCommentExpanded ? '▼' : '▶'} {comment.replyCount} {comment.replyCount === 1 ? 'Reply' : 'Replies'}
+                                    </button>
+                                  )}
+
+                                  {/* Replies */}
+                                  {isCommentExpanded && commentReplies.length > 0 && (
+                                    <div className="mt-4 ml-13 space-y-3 border-l-2 border-slate-700 pl-4">
+                                      {commentReplies.map((reply) => (
+                                        <div key={reply.id} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                                          <div className="flex items-start justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
+                                                <span className="text-xs font-bold text-white">
+                                                  {(reply.userName || 'U')[0].toUpperCase()}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                <p className="text-xs font-semibold text-slate-200">{reply.userName}</p>
+                                                <p className="text-xs text-slate-500">{formatDate(reply.timestamp)}</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs">
+                                              <span className="text-green-400">👍 {reply.likes}</span>
+                                              <span className="text-red-400">👎 {reply.dislikes}</span>
+                                            </div>
+                                          </div>
+                                          <p className="text-sm text-slate-300 ml-10">{reply.content}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
