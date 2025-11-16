@@ -58,6 +58,19 @@ export default function VideoUploadView() {
   const [deletingCommentIds, setDeletingCommentIds] = useState<string[]>([]);
   const [deletingReplyIds, setDeletingReplyIds] = useState<string[]>([]);
 
+  // Bad words list for flagging
+  const badWords = [
+    'fuck', 'shit', 'ass', 'bitch', 'damn', 'hell', 'crap', 'bastard',
+    'dick', 'pussy', 'cock', 'cunt', 'whore', 'slut',
+    'retard', 'idiot', 'stupid', 'dumb', 'kill yourself', 'kys', 'die',
+    'hate', 'racist', 'sexist', 'fag', 'nigger', 'nigga'
+  ];
+
+  const containsBadWords = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return badWords.some(word => lowerText.includes(word));
+  };
+
   // add form state
   const [showAdd, setShowAdd] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
@@ -622,7 +635,9 @@ export default function VideoUploadView() {
                               const isCommentExpanded = expandedCommentId === comment.id;
                               
                               return (
-                                <div key={comment.id} className="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                                <div key={comment.id} className={`bg-slate-900/50 rounded-xl p-4 border ${
+                                  containsBadWords(comment.content) ? 'border-orange-500/50 bg-orange-500/5' : 'border-slate-700'
+                                }`}>
                                   {/* Comment Header */}
                                   <div className="flex items-start justify-between mb-2">
                                     <div className="flex items-center gap-3">
@@ -632,7 +647,7 @@ export default function VideoUploadView() {
                                         </span>
                                       </div>
                                       <div>
-                                        <p className="text-sm font-semibold text-slate-200">{comment.userName}</p>
+                                        <p className="text-sm font-semibold text-slate-200">@{comment.userName}</p>
                                         <p className="text-xs text-slate-500">{formatDate(comment.timestamp)}</p>
                                       </div>
                                     </div>
@@ -663,7 +678,14 @@ export default function VideoUploadView() {
                                   </div>
 
                                   {/* Comment Content */}
-                                  <p className="text-slate-300 mb-3 ml-13">{comment.content}</p>
+                                  <div className="ml-13">
+                                    <p className="text-slate-300 mb-3">{comment.content}</p>
+                                    {containsBadWords(comment.content) && (
+                                      <span className="inline-block px-2 py-1 text-xs font-bold text-orange-400 bg-orange-500/20 rounded-full border border-orange-500/50 mb-2">
+                                        ⚠️ Potentially Harmful Content
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {/* Replies Toggle */}
                                   {comment.replyCount > 0 && (
@@ -679,7 +701,9 @@ export default function VideoUploadView() {
                                   {isCommentExpanded && commentReplies.length > 0 && (
                                     <div className="mt-4 ml-13 space-y-3 border-l-2 border-slate-700 pl-4">
                                       {commentReplies.map((reply) => (
-                                        <div key={reply.id} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                                        <div key={reply.id} className={`rounded-lg p-3 border ${
+                                          containsBadWords(reply.content) ? 'bg-orange-500/5 border-orange-500/50' : 'bg-slate-800/50 border-slate-700/50'
+                                        }`}>
                                           <div className="flex items-start justify-between mb-2">
                                             <div className="flex items-center gap-2">
                                               <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
@@ -688,7 +712,7 @@ export default function VideoUploadView() {
                                                 </span>
                                               </div>
                                               <div>
-                                                <p className="text-xs font-semibold text-slate-200">{reply.userName}</p>
+                                                <p className="text-xs font-semibold text-slate-200">@{reply.userName}</p>
                                                 <p className="text-xs text-slate-500">{formatDate(reply.timestamp)}</p>
                                               </div>
                                             </div>
@@ -713,7 +737,14 @@ export default function VideoUploadView() {
                                               </button>
                                             </div>
                                           </div>
-                                          <p className="text-sm text-slate-300 ml-10">{reply.content}</p>
+                                          <div className="ml-10">
+                                            <p className="text-sm text-slate-300 mb-1">{reply.content}</p>
+                                            {containsBadWords(reply.content) && (
+                                              <span className="inline-block px-2 py-0.5 text-xs font-bold text-orange-400 bg-orange-500/20 rounded-full border border-orange-500/50">
+                                                ⚠️ Flagged
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
                                       ))}
                                     </div>
