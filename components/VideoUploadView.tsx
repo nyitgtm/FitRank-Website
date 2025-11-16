@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, updateDoc, doc, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, addDoc, serverTimestamp, query, orderBy, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import app from '@/lib/firebase';
 import { getStorage, ref, deleteObject } from 'firebase/storage';
@@ -55,6 +55,8 @@ export default function VideoUploadView() {
   const [replies, setReplies] = useState<Map<string, Reply[]>>(new Map());
   const [loadingComments, setLoadingComments] = useState(false);
   const [expandedCommentId, setExpandedCommentId] = useState<string | null>(null);
+  const [deletingCommentIds, setDeletingCommentIds] = useState<string[]>([]);
+  const [deletingReplyIds, setDeletingReplyIds] = useState<string[]>([]);
 
   // add form state
   const [showAdd, setShowAdd] = useState(false);
@@ -253,6 +255,56 @@ export default function VideoUploadView() {
 
   const toggleReplies = (commentId: string) => {
     setExpandedCommentId(expandedCommentId === commentId ? null : commentId);
+  };
+
+  const deleteComment = async (workoutId: string, commentId: string) => {
+    const ok = confirm('Delete this comment? This will also delete all replies.');
+    if (!ok) return;
+
+    setDeletingCommentIds(prev => [...prev, commentId]);
+    try {
+      // Delete the comment document
+      await deleteDoc(doc(db, `workouts/${workoutId}/comments`, commentId));
+      
+      // Reload comments for this workout
+      await loadCommentsForWorkout(workoutId);
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      alert('Failed to delete comment. See console for details.');
+    } finally {
+      setDeletingCommentIds(prev => prev.filter(id => id !== commentId));
+    }
+  };
+
+  const deleteReply = async (workoutId: string, commentId: string, replyId: string) => {
+    const ok = confirm('Delete this reply?');
+    if (!ok) return;
+
+    setDeletingReplyIds(prev => [...prev, replyId]);
+    try {
+      // Delete the reply document
+      await deleteDoc(doc(db, `workouts/${workoutId}/comments/${commentId}/replies`, replyId));
+      
+      // Get current comment to decrement reply count
+      const commentRef = doc(db, `workouts/${workoutId}/comments`, commentId);
+      const commentDoc = await getDocs(query(collection(db, `workouts/${workoutId}/comments`)));
+      const currentComment = commentDoc.docs.find(d => d.id === commentId);
+      
+      if (currentComment) {
+        const currentReplyCount = currentComment.data().replyCount || 0;
+        await updateDoc(commentRef, {
+          replyCount: Math.max(0, currentReplyCount - 1)
+        });
+      }
+      
+      // Reload comments for this workout
+      await loadCommentsForWorkout(workoutId);
+    } catch (error) {
+      console.error('Error deleting reply:', error);
+      alert('Failed to delete reply. See console for details.');
+    } finally {
+      setDeletingReplyIds(prev => prev.filter(id => id !== replyId));
+    }
   };
 
   const deleteVideo = async (id: string, videoUrl: string) => {
@@ -584,13 +636,29 @@ export default function VideoUploadView() {
                                         <p className="text-xs text-slate-500">{formatDate(comment.timestamp)}</p>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-3 text-sm">
-                                      <span className="flex items-center gap-1 text-green-400">
-                                        👍 {comment.likes}
-                                      </span>
-                                      <span className="flex items-center gap-1 text-red-400">
-                                        👎 {comment.dislikes}
-                                      </span>
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex items-center gap-3 text-sm">
+                                        <span className="flex items-center gap-1 text-green-400">
+                                          👍 {comment.likes}
+                                        </span>
+                                        <span className="flex items-center gap-1 text-red-400">
+                                          👎 {comment.dislikes}
+                                        </span>
+                                      </div>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          deleteComment(item.id, comment.id);
+                                        }}
+                                        disabled={deletingCommentIds.includes(comment.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                          deletingCommentIds.includes(comment.id)
+                                            ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                                            : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'
+                                        }`}
+                                      >
+                                        {deletingCommentIds.includes(comment.id) ? '...' : '🗑️'}
+                                      </button>
                                     </div>
                                   </div>
 
@@ -624,9 +692,25 @@ export default function VideoUploadView() {
                                                 <p className="text-xs text-slate-500">{formatDate(reply.timestamp)}</p>
                                               </div>
                                             </div>
-                                            <div className="flex items-center gap-2 text-xs">
-                                              <span className="text-green-400">👍 {reply.likes}</span>
-                                              <span className="text-red-400">👎 {reply.dislikes}</span>
+                                            <div className="flex items-center gap-2">
+                                              <div className="flex items-center gap-2 text-xs">
+                                                <span className="text-green-400">👍 {reply.likes}</span>
+                                                <span className="text-red-400">👎 {reply.dislikes}</span>
+                                              </div>
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  deleteReply(item.id, comment.id, reply.id);
+                                                }}
+                                                disabled={deletingReplyIds.includes(reply.id)}
+                                                className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all ${
+                                                  deletingReplyIds.includes(reply.id)
+                                                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                                                    : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'
+                                                }`}
+                                              >
+                                                {deletingReplyIds.includes(reply.id) ? '...' : '🗑️'}
+                                              </button>
                                             </div>
                                           </div>
                                           <p className="text-sm text-slate-300 ml-10">{reply.content}</p>
