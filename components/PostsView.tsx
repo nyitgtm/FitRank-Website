@@ -360,6 +360,7 @@ export default function PostsView() {
             const isDeleting = deletingIds.includes(post.id);
             const isExpanded = expandedPostId === post.id;
             const isFlagged = isPostFlagged(post.text);
+            const imageSrc = (post as any).imageURL || null;
             return (
               <div key={post.id}>
                 <div
@@ -378,6 +379,25 @@ export default function PostsView() {
                       <span className="inline-block mt-1 px-2 py-0.5 text-[11px] font-medium text-[#ff9500] bg-[#ff9500]/10 rounded-full">
                         ⚠️ Potentially Harmful
                       </span>
+                    )}
+                    {imageSrc && (
+                      <div className="mt-3">
+                        <div style={{ maxWidth: 500 }} className="overflow-hidden rounded-lg">
+                          <a
+                            href={imageSrc}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <img
+                              src={imageSrc}
+                              alt="Post image preview"
+                              style={{ width: '100%', height: 'auto', maxWidth: '500px' }}
+                              className="rounded-lg border border-[#d2d2d7]"
+                            />
+                          </a>
+                        </div>
+                      </div>
                     )}
                   </div>
                   <div className="text-[15px] text-[#86868b]">
