@@ -48,7 +48,7 @@ export type ScoreType = 'tokens' | 'weight';
 export type LeaderboardTab = 'global' | 'team' | 'following';
 
 // Item Shop Types
-export type ItemCategory = 'theme' | 'avatar' | 'frame' | 'badge' | 'powerup' | 'merchandise';
+export type ItemCategory = 'theme' | 'avatar' | 'frame' | 'badge' | 'powerup' | 'merchandise' | 'appicon';
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
 export interface ShopItem {
