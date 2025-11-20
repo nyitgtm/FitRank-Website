@@ -8,4 +8,4 @@
 # Firebase client config values are safe to expose in client-side code
 # Only FIREBASE_PRIVATE_KEY needs to be kept secret (server-side only)
 [build.environment]
-  SECRETS_SCAN_OMIT_KEYS = "FIREBASE_PROJECT_ID"
+  SECRETS_SCAN_OMIT_KEYS = "FIREBASE_PROJECT_ID,FIREBASE_API_KEY"
