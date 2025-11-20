@@ -32,6 +32,7 @@ export default function UsersView() {
   const [selectedUser, setSelectedUser] = useState<ExtendedUser | null>(null);
   const [modalValue, setModalValue] = useState<string>('');
   const [updating, setUpdating] = useState(false);
+  const [sendingResetUserId, setSendingResetUserId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -169,6 +170,35 @@ export default function UsersView() {
       alert('Failed to update suspension status: ' + error.message);
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const sendPasswordReset = async (user: ExtendedUser) => {
+    const okConfirm = confirm(
+      `Send password reset email for ${user.name} (@${user.username})?`
+    );
+    if (!okConfirm) return;
+
+    setActiveMenuUserId(null);
+    setSendingResetUserId(user.id);
+    try {
+      const response = await fetch('/api/users/send-password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send password reset');
+      }
+
+      alert(data.message || `Password reset email sent to ${data.email || 'user'}`);
+    } catch (error: any) {
+      console.error('Error sending password reset:', error);
+      alert('Failed to send password reset: ' + (error.message || error));
+    } finally {
+      setSendingResetUserId(null);
     }
   };
 
@@ -456,6 +486,13 @@ export default function UsersView() {
                           className="w-full text-left px-4 py-3 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7]"
                         >
                           Change Team
+                        </button>
+                        <button
+                          onClick={() => sendPasswordReset(user)}
+                          disabled={sendingResetUserId === user.id}
+                          className="w-full text-left px-4 py-3 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7] disabled:opacity-50"
+                        >
+                          {sendingResetUserId === user.id ? 'Sending...' : 'Send Password Reset'}
                         </button>
                         <button
                           onClick={() => toggleSuspension(user)}
