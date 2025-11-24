@@ -76,7 +76,15 @@ export default function GymsView() {
     setSortConfig({ key, direction });
   };
 
-  const sortedGyms = [...gyms].sort((a, b) => {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredGyms = gyms.filter(gym =>
+    gym.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    gym.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    gym.location.address.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const sortedGyms = [...filteredGyms].sort((a, b) => {
     if (!sortConfig) return 0;
 
     let aValue: any = sortConfig.key === 'location' ? a.location.address : a[sortConfig.key as keyof Gym];
@@ -123,6 +131,16 @@ export default function GymsView() {
   return (
     <div>
       <h2 className="text-3xl font-semibold text-[#1d1d1f] mb-8">Gyms</h2>
+
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="Search by name, location, or ID..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-4 py-3 bg-[#f5f5f7] border border-[#d2d2d7] rounded-xl text-[#1d1d1f] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20"
+        />
+      </div>
 
       <div className="overflow-x-auto rounded-2xl border border-[#d2d2d7]">
         <table className="w-full">
