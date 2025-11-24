@@ -32,6 +32,7 @@ const TEAM_COLORS: { [key: string]: string } = {
 export default function GymsView() {
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   useEffect(() => {
     const fetchGyms = async () => {
@@ -60,6 +61,35 @@ export default function GymsView() {
     fetchGyms();
   }, []);
 
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedGyms = [...gyms].sort((a, b) => {
+    if (!sortConfig) return 0;
+
+    let aValue: any = sortConfig.key === 'location' ? a.location.address : a[sortConfig.key as keyof Gym];
+    let bValue: any = sortConfig.key === 'location' ? b.location.address : b[sortConfig.key as keyof Gym];
+
+    if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+    if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+
+    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortConfig?.key !== column) {
+      return <span className="text-[#86868b]">↕</span>;
+    }
+    return sortConfig.direction === 'asc' ? <span className="text-[#0071e3]">↑</span> : <span className="text-[#0071e3]">↓</span>;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-20">
@@ -71,23 +101,44 @@ export default function GymsView() {
   return (
     <div>
       <h2 className="text-3xl font-semibold text-[#1d1d1f] mb-8">Gyms</h2>
-      
+
       <div className="overflow-x-auto rounded-2xl border border-[#d2d2d7]">
         <table className="w-full">
           <thead className="bg-[#f5f5f7]">
             <tr>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-[#1d1d1f]">Name</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-[#1d1d1f]">Location</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-[#1d1d1f]">Owner Team</th>
+              <th
+                className="px-6 py-4 text-left text-[14px] font-semibold text-[#1d1d1f] cursor-pointer hover:text-[#0071e3] transition-colors"
+                onClick={() => handleSort('name')}
+              >
+                <div className="flex items-center gap-1">
+                  Name <SortIcon column="name" />
+                </div>
+              </th>
+              <th
+                className="px-6 py-4 text-left text-[14px] font-semibold text-[#1d1d1f] cursor-pointer hover:text-[#0071e3] transition-colors"
+                onClick={() => handleSort('location')}
+              >
+                <div className="flex items-center gap-1">
+                  Location <SortIcon column="location" />
+                </div>
+              </th>
+              <th
+                className="px-6 py-4 text-left text-[14px] font-semibold text-[#1d1d1f] cursor-pointer hover:text-[#0071e3] transition-colors"
+                onClick={() => handleSort('ownerTeamName')}
+              >
+                <div className="flex items-center gap-1">
+                  Owner Team <SortIcon column="ownerTeamName" />
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#d2d2d7]">
-            {gyms.map((gym) => (
-              <tr key={gym.id} className="hover:bg-[#f5f5f7] transition-colors">
+            {sortedGyms.map((gym) => (
+              <tr key={gym.id} className="hover:bg-[#e5e5e5] transition-colors odd:bg-white even:bg-[#f5f5f7]">
                 <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.name}</td>
                 <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.location.address}</td>
                 <td className="px-6 py-4 text-sm">
-                  <span 
+                  <span
                     className="font-semibold"
                     style={{ color: gym.ownerTeamColor }}
                   >
