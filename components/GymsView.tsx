@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Fragment } from 'react';
-import { collection, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 interface Gym {
@@ -21,12 +21,14 @@ interface Gym {
 }
 
 const TEAM_NAMES: { [key: string]: string } = {
+  '0': 'Default',
   '1': 'Killa Gorrilaz',
   '2': 'Regal Eagles',
   '3': 'Dark Sharks'
 };
 
 const TEAM_COLORS: { [key: string]: string } = {
+  '0': '#86868b',
   '1': '#ff7700',
   '2': '#ffd700',
   '3': '#00ddff'
@@ -132,17 +134,62 @@ export default function GymsView() {
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [actionMenu]);
 
+  const [isAdding, setIsAdding] = useState(false);
+  const [newGym, setNewGym] = useState({
+    name: '',
+    location: { address: '', lat: 0, lon: 0 },
+    ownerTeamId: '0'
+  });
+
+  const handleAddGym = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdating(true);
+    try {
+      const ownerTeamRef = newGym.ownerTeamId === '0'
+        ? doc(db, 'workouts', '0')
+        : doc(db, 'teams', newGym.ownerTeamId);
+
+      const docRef = await addDoc(collection(db, 'gyms'), {
+        name: newGym.name,
+        location: newGym.location,
+        ownerTeamId: ownerTeamRef
+      });
+
+      const newGymData: Gym = {
+        id: docRef.id,
+        name: newGym.name,
+        location: newGym.location,
+        ownerTeamId: newGym.ownerTeamId,
+        ownerTeamName: TEAM_NAMES[newGym.ownerTeamId],
+        ownerTeamColor: TEAM_COLORS[newGym.ownerTeamId]
+      };
+
+      setGyms(prev => [...prev, newGymData]);
+      setIsAdding(false);
+      setNewGym({ name: '', location: { address: '', lat: 0, lon: 0 }, ownerTeamId: '0' });
+    } catch (error) {
+      console.error('Error adding gym:', error);
+      alert('Failed to add gym');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleUpdateGym = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGym) return;
 
     setUpdating(true);
     try {
+      const ownerTeamRef = editingGym.ownerTeamId === '0'
+        ? doc(db, 'workouts', '0')
+        : doc(db, 'teams', editingGym.ownerTeamId);
+
       const gymRef = doc(db, 'gyms', editingGym.id);
       await updateDoc(gymRef, {
         name: editingGym.name,
         location: editingGym.location,
-        ownerTeamId: doc(db, 'teams', editingGym.ownerTeamId) // Assuming ownerTeamId is just the ID string
+        ownerTeamId: ownerTeamRef
       });
 
       // Update local state
@@ -179,7 +226,15 @@ export default function GymsView() {
 
   return (
     <div>
-      <h2 className="text-3xl font-semibold text-[#1d1d1f] mb-8">Gyms</h2>
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-3xl font-semibold text-[#1d1d1f]">Gyms</h2>
+        <button
+          onClick={() => setIsAdding(true)}
+          className="px-4 py-2 bg-[#0071e3] text-white rounded-lg font-medium hover:bg-[#0077ed] transition-colors shadow-sm"
+        >
+          + Add Gym
+        </button>
+      </div>
 
       <div className="mb-6">
         <input
@@ -363,6 +418,114 @@ export default function GymsView() {
       )}
 
       {/* Edit Modal */}
+      {/* Add Modal */}
+      {isAdding && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 border-b border-[#d2d2d7] flex justify-between items-center bg-[#f5f5f7]">
+              <h3 className="text-lg font-semibold text-[#1d1d1f]">Add New Gym</h3>
+              <button
+                onClick={() => setIsAdding(false)}
+                className="text-[#86868b] hover:text-[#1d1d1f] transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddGym} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Name</label>
+                <input
+                  type="text"
+                  value={newGym.name}
+                  onChange={e => setNewGym({ ...newGym, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-[#d2d2d7] rounded-lg focus:outline-none focus:border-[#0071e3] focus:ring-1 focus:ring-[#0071e3]"
+                  required
+                  placeholder="Gym Name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Address</label>
+                <input
+                  type="text"
+                  value={newGym.location.address}
+                  onChange={e => setNewGym({
+                    ...newGym,
+                    location: { ...newGym.location, address: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 bg-white border border-[#d2d2d7] rounded-lg focus:outline-none focus:border-[#0071e3] focus:ring-1 focus:ring-[#0071e3]"
+                  required
+                  placeholder="123 Main St, City, State"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Latitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newGym.location.lat}
+                    onChange={e => setNewGym({
+                      ...newGym,
+                      location: { ...newGym.location, lat: parseFloat(e.target.value) }
+                    })}
+                    className="w-full px-3 py-2 bg-white border border-[#d2d2d7] rounded-lg focus:outline-none focus:border-[#0071e3] focus:ring-1 focus:ring-[#0071e3]"
+                    required
+                    placeholder="0.000000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Longitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newGym.location.lon}
+                    onChange={e => setNewGym({
+                      ...newGym,
+                      location: { ...newGym.location, lon: parseFloat(e.target.value) }
+                    })}
+                    className="w-full px-3 py-2 bg-white border border-[#d2d2d7] rounded-lg focus:outline-none focus:border-[#0071e3] focus:ring-1 focus:ring-[#0071e3]"
+                    required
+                    placeholder="0.000000"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Owner Team</label>
+                <select
+                  value={newGym.ownerTeamId}
+                  onChange={e => setNewGym({ ...newGym, ownerTeamId: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-[#d2d2d7] rounded-lg focus:outline-none focus:border-[#0071e3] focus:ring-1 focus:ring-[#0071e3]"
+                >
+                  {Object.entries(TEAM_NAMES).map(([id, name]) => (
+                    <option key={id} value={id}>{name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsAdding(false)}
+                  className="px-4 py-2 text-sm font-medium text-[#1d1d1f] bg-[#f5f5f7] rounded-lg hover:bg-[#e5e5e5] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updating}
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#0071e3] rounded-lg hover:bg-[#0077ed] transition-colors disabled:opacity-50"
+                >
+                  {updating ? 'Adding...' : 'Add Gym'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {editingGym && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
