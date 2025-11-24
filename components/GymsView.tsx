@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -15,6 +15,9 @@ interface Gym {
   ownerTeamId: string;
   ownerTeamName: string;
   ownerTeamColor: string;
+  bestBenchId?: any;
+  bestDeadliftId?: any;
+  bestSquatId?: any;
 }
 
 const TEAM_NAMES: { [key: string]: string } = {
@@ -33,6 +36,7 @@ export default function GymsView() {
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [expandedGymId, setExpandedGymId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchGyms = async () => {
@@ -47,7 +51,10 @@ export default function GymsView() {
             location: data.location || { address: 'N/A', lat: 0, lon: 0 },
             ownerTeamId: teamId,
             ownerTeamName: TEAM_NAMES[teamId] || teamId,
-            ownerTeamColor: TEAM_COLORS[teamId] || '#86868b'
+            ownerTeamColor: TEAM_COLORS[teamId] || '#86868b',
+            bestBenchId: data.bestBenchId,
+            bestDeadliftId: data.bestDeadliftId,
+            bestSquatId: data.bestSquatId
           };
         });
         setGyms(gymsData);
@@ -88,6 +95,21 @@ export default function GymsView() {
       return <span className="text-[#86868b]">↕</span>;
     }
     return sortConfig.direction === 'asc' ? <span className="text-[#0071e3]">↑</span> : <span className="text-[#0071e3]">↓</span>;
+  };
+
+  const toggleGymExpansion = (gymId: string) => {
+    if (expandedGymId === gymId) {
+      setExpandedGymId(null);
+    } else {
+      setExpandedGymId(gymId);
+    }
+  };
+
+  const formatReference = (ref: any) => {
+    if (!ref) return 'None';
+    if (typeof ref === 'string') return ref;
+    if (ref.path) return ref.path;
+    return 'Reference';
   };
 
   if (loading) {
@@ -134,18 +156,75 @@ export default function GymsView() {
           </thead>
           <tbody className="divide-y divide-[#d2d2d7]">
             {sortedGyms.map((gym) => (
-              <tr key={gym.id} className="hover:bg-[#e5e5e5] transition-colors odd:bg-white even:bg-[#f5f5f7]">
-                <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.name}</td>
-                <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.location.address}</td>
-                <td className="px-6 py-4 text-sm">
-                  <span
-                    className="font-semibold"
-                    style={{ color: gym.ownerTeamColor }}
-                  >
-                    {gym.ownerTeamName}
-                  </span>
-                </td>
-              </tr>
+              <Fragment key={gym.id}>
+                <tr
+                  className="hover:bg-[#e5e5e5] transition-colors odd:bg-white even:bg-[#f5f5f7] cursor-pointer"
+                  onClick={() => toggleGymExpansion(gym.id)}
+                >
+                  <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.name}</td>
+                  <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.location.address}</td>
+                  <td className="px-6 py-4 text-sm">
+                    <span
+                      className="font-semibold"
+                      style={{ color: gym.ownerTeamColor }}
+                    >
+                      {gym.ownerTeamName}
+                    </span>
+                  </td>
+                </tr>
+                {expandedGymId === gym.id && (
+                  <tr className="bg-[#f5f5f7]">
+                    <td colSpan={3} className="px-6 py-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                        <div>
+                          <h4 className="font-semibold text-[#1d1d1f] mb-2">Best Lifts</h4>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-[#86868b]">Bench Press:</span>
+                              <span className="font-mono">{formatReference(gym.bestBenchId)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[#86868b]">Deadlift:</span>
+                              <span className="font-mono">{formatReference(gym.bestDeadliftId)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[#86868b]">Squat:</span>
+                              <span className="font-mono">{formatReference(gym.bestSquatId)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-[#1d1d1f] mb-2">Location Details</h4>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-[#86868b]">Address:</span>
+                              <span className="text-right">{gym.location.address}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[#86868b]">Coordinates:</span>
+                              <span className="font-mono">{gym.location.lat.toFixed(6)}, {gym.location.lon.toFixed(6)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[#86868b]">Owner Team ID:</span>
+                              <span className="font-mono text-xs">{gym.ownerTeamId}</span>
+                            </div>
+                            <div className="mt-2">
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${gym.location.lat},${gym.location.lon}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#0071e3] hover:underline flex items-center gap-1"
+                              >
+                                View on Google Maps ↗
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
