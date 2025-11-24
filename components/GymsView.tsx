@@ -13,7 +13,21 @@ interface Gym {
     lon: number;
   };
   ownerTeamId: string;
+  ownerTeamName: string;
+  ownerTeamColor: string;
 }
+
+const TEAM_NAMES: { [key: string]: string } = {
+  '1': 'Killa Gorrilaz',
+  '2': 'Regal Eagles',
+  '3': 'Dark Sharks'
+};
+
+const TEAM_COLORS: { [key: string]: string } = {
+  '1': '#ff7700',
+  '2': '#ffd700',
+  '3': '#00ddff'
+};
 
 export default function GymsView() {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -25,11 +39,14 @@ export default function GymsView() {
         const gymsSnapshot = await getDocs(collection(db, 'gyms'));
         const gymsData = gymsSnapshot.docs.map(doc => {
           const data = doc.data();
+          const teamId = data.ownerTeamId?.id || 'N/A';
           return {
             id: doc.id,
             name: data.name || 'N/A',
             location: data.location || { address: 'N/A', lat: 0, lon: 0 },
-            ownerTeamId: data.ownerTeamId?.id || 'N/A'
+            ownerTeamId: teamId,
+            ownerTeamName: TEAM_NAMES[teamId] || teamId,
+            ownerTeamColor: TEAM_COLORS[teamId] || '#86868b'
           };
         });
         setGyms(gymsData);
@@ -61,7 +78,7 @@ export default function GymsView() {
             <tr>
               <th className="px-6 py-4 text-left text-sm font-semibold text-[#1d1d1f]">Name</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-[#1d1d1f]">Location</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-[#1d1d1f]">Owner ID</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-[#1d1d1f]">Owner Team</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#d2d2d7]">
@@ -69,7 +86,14 @@ export default function GymsView() {
               <tr key={gym.id} className="hover:bg-[#f5f5f7] transition-colors">
                 <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.name}</td>
                 <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.location.address}</td>
-                <td className="px-6 py-4 text-sm text-[#1d1d1f]">{gym.ownerTeamId}</td>
+                <td className="px-6 py-4 text-sm">
+                  <span 
+                    className="font-semibold"
+                    style={{ color: gym.ownerTeamColor }}
+                  >
+                    {gym.ownerTeamName}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
