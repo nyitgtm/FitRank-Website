@@ -160,14 +160,14 @@ export default function VideoUploadView() {
       const commentsRef = collection(db, `workouts/${workoutId}/comments`);
       const commentsQuery = query(commentsRef, orderBy('timestamp', 'desc'));
       const commentsSnap = await getDocs(commentsQuery);
-      
+
       const commentsData: Comment[] = [];
       const repliesMap = new Map<string, Reply[]>();
 
       for (const commentDoc of commentsSnap.docs) {
         const commentData = commentDoc.data();
         const commentUser = usersMap.get(commentData.userID);
-        
+
         commentsData.push({
           id: commentDoc.id,
           content: commentData.content || '',
@@ -184,7 +184,7 @@ export default function VideoUploadView() {
           const repliesRef = collection(db, `workouts/${workoutId}/comments/${commentDoc.id}/replies`);
           const repliesQuery = query(repliesRef, orderBy('timestamp', 'asc'));
           const repliesSnap = await getDocs(repliesQuery);
-          
+
           const repliesData: Reply[] = repliesSnap.docs.map(replyDoc => {
             const replyData = replyDoc.data();
             const replyUser = usersMap.get(replyData.userID);
@@ -198,7 +198,7 @@ export default function VideoUploadView() {
               dislikes: replyData.dislikes || 0,
             };
           });
-          
+
           repliesMap.set(commentDoc.id, repliesData);
         }
       }
@@ -221,7 +221,13 @@ export default function VideoUploadView() {
     }
   };
 
-  const sortedItems = [...items].sort((a, b) => {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredItems = items.filter(item =>
+    item.id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const sortedItems = [...filteredItems].sort((a, b) => {
     let aValue: any;
     let bValue: any;
 
@@ -278,7 +284,7 @@ export default function VideoUploadView() {
     try {
       // Delete the comment document
       await deleteDoc(doc(db, `workouts/${workoutId}/comments`, commentId));
-      
+
       // Reload comments for this workout
       await loadCommentsForWorkout(workoutId);
     } catch (error) {
@@ -297,19 +303,19 @@ export default function VideoUploadView() {
     try {
       // Delete the reply document
       await deleteDoc(doc(db, `workouts/${workoutId}/comments/${commentId}/replies`, replyId));
-      
+
       // Get current comment to decrement reply count
       const commentRef = doc(db, `workouts/${workoutId}/comments`, commentId);
       const commentDoc = await getDocs(query(collection(db, `workouts/${workoutId}/comments`)));
       const currentComment = commentDoc.docs.find(d => d.id === commentId);
-      
+
       if (currentComment) {
         const currentReplyCount = currentComment.data().replyCount || 0;
         await updateDoc(commentRef, {
           replyCount: Math.max(0, currentReplyCount - 1)
         });
       }
-      
+
       // Reload comments for this workout
       await loadCommentsForWorkout(workoutId);
     } catch (error) {
@@ -421,19 +427,28 @@ export default function VideoUploadView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-4xl font-bold gradient-text mb-2">Workout Videos</h2>
           <p className="text-slate-400">{sortedItems.length} {sortedItems.length === 1 ? 'video' : 'videos'} uploaded</p>
         </div>
-        {user?.isCoach && (
-          <button
-            onClick={() => setShowAdd(prev => !prev)}
-            className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl font-semibold shadow-lg shadow-indigo-500/30 transition-all active:scale-95"
-          >
-            {showAdd ? '✕ Cancel' : '+ Add Video'}
-          </button>
-        )}
+        <div className="flex items-center gap-12">
+          <input
+            type="text"
+            placeholder="Search by UUID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 w-64"
+          />
+          {user?.isCoach && (
+            <button
+              onClick={() => setShowAdd(prev => !prev)}
+              className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl font-semibold shadow-lg shadow-indigo-500/30 transition-all active:scale-95 whitespace-nowrap"
+            >
+              {showAdd ? '✕ Cancel' : '+ Add Video'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Add Video Form */}
@@ -501,9 +516,8 @@ export default function VideoUploadView() {
             <button
               onClick={handleCreate}
               disabled={creating}
-              className={`px-6 py-3 rounded-xl text-white font-semibold transition-all ${
-                creating ? 'bg-slate-600 cursor-not-allowed' : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-lg shadow-indigo-500/30'
-              }`}
+              className={`px-6 py-3 rounded-xl text-white font-semibold transition-all ${creating ? 'bg-slate-600 cursor-not-allowed' : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-lg shadow-indigo-500/30'
+                }`}
             >
               {creating ? 'Adding...' : '✓ Add Video'}
             </button>
@@ -565,9 +579,8 @@ export default function VideoUploadView() {
             return (
               <div key={item.id}>
                 <div
-                  className={`grid grid-cols-6 gap-4 px-6 py-4 border-b border-slate-700/50 ${
-                    isEven ? 'bg-slate-800/30' : 'bg-slate-800/10'
-                  } hover:bg-slate-700/30 transition-colors cursor-pointer`}
+                  className={`grid grid-cols-6 gap-4 px-6 py-4 border-b border-slate-700/50 ${isEven ? 'bg-slate-800/30' : 'bg-slate-800/10'
+                    } hover:bg-slate-700/30 transition-colors cursor-pointer`}
                   onClick={() => toggleVideoExpansion(item.id)}
                 >
                   <div className="text-sm text-slate-200 font-medium">
@@ -589,11 +602,10 @@ export default function VideoUploadView() {
                     <button
                       onClick={() => deleteVideo(item.id, item.workout.videoUrl)}
                       disabled={isDeleting}
-                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                        isDeleting
-                          ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/20'
-                      }`}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${isDeleting
+                        ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/20'
+                        }`}
                     >
                       {isDeleting ? 'Deleting...' : '🗑️ Delete'}
                     </button>
@@ -633,11 +645,10 @@ export default function VideoUploadView() {
                             {comments.map((comment) => {
                               const commentReplies = replies.get(comment.id) || [];
                               const isCommentExpanded = expandedCommentId === comment.id;
-                              
+
                               return (
-                                <div key={comment.id} className={`bg-slate-900/50 rounded-xl p-4 border ${
-                                  containsBadWords(comment.content) ? 'border-orange-500/50 bg-orange-500/5' : 'border-slate-700'
-                                }`}>
+                                <div key={comment.id} className={`bg-slate-900/50 rounded-xl p-4 border ${containsBadWords(comment.content) ? 'border-orange-500/50 bg-orange-500/5' : 'border-slate-700'
+                                  }`}>
                                   {/* Comment Header */}
                                   <div className="flex items-start justify-between mb-2">
                                     <div className="flex items-center gap-3">
@@ -666,11 +677,10 @@ export default function VideoUploadView() {
                                           deleteComment(item.id, comment.id);
                                         }}
                                         disabled={deletingCommentIds.includes(comment.id)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                                          deletingCommentIds.includes(comment.id)
-                                            ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                                            : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'
-                                        }`}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${deletingCommentIds.includes(comment.id)
+                                          ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                                          : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'
+                                          }`}
                                       >
                                         {deletingCommentIds.includes(comment.id) ? '...' : '🗑️'}
                                       </button>
@@ -701,9 +711,8 @@ export default function VideoUploadView() {
                                   {isCommentExpanded && commentReplies.length > 0 && (
                                     <div className="mt-4 ml-13 space-y-3 border-l-2 border-slate-700 pl-4">
                                       {commentReplies.map((reply) => (
-                                        <div key={reply.id} className={`rounded-lg p-3 border ${
-                                          containsBadWords(reply.content) ? 'bg-orange-500/5 border-orange-500/50' : 'bg-slate-800/50 border-slate-700/50'
-                                        }`}>
+                                        <div key={reply.id} className={`rounded-lg p-3 border ${containsBadWords(reply.content) ? 'bg-orange-500/5 border-orange-500/50' : 'bg-slate-800/50 border-slate-700/50'
+                                          }`}>
                                           <div className="flex items-start justify-between mb-2">
                                             <div className="flex items-center gap-2">
                                               <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
@@ -727,11 +736,10 @@ export default function VideoUploadView() {
                                                   deleteReply(item.id, comment.id, reply.id);
                                                 }}
                                                 disabled={deletingReplyIds.includes(reply.id)}
-                                                className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all ${
-                                                  deletingReplyIds.includes(reply.id)
-                                                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                                                    : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'
-                                                }`}
+                                                className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all ${deletingReplyIds.includes(reply.id)
+                                                  ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                                                  : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'
+                                                  }`}
                                               >
                                                 {deletingReplyIds.includes(reply.id) ? '...' : '🗑️'}
                                               </button>
