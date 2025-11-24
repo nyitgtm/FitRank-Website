@@ -9,8 +9,9 @@ import UsersView from '@/components/UsersView';
 import VideoUploadView from '@/components/VideoUploadView';
 import PostsView from '@/components/PostsView';
 import ItemShopView from '@/components/ItemShopView';
+import GymsView from '@/components/GymsView';
 
-type TabType = 'leaderboard' | 'users' | 'videos' | 'posts' | 'shop' | null;
+type TabType = 'leaderboard' | 'users' | 'videos' | 'posts' | 'shop' | 'gyms' | null;
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
@@ -92,6 +93,16 @@ export default function DashboardPage() {
           >
             Item Shop
           </button>
+          <button
+            onClick={() => setActiveTab('gyms')}
+            className={`flex-1 px-6 py-3.5 rounded-xl text-[15px] font-medium transition-all ${
+              activeTab === 'gyms'
+                ? 'bg-white text-[#1d1d1f] shadow-sm'
+                : 'text-[#86868b] hover:text-[#1d1d1f]'
+            }`}
+          >
+            Gyms
+          </button>
         </div>
 
         {/* Content */}
@@ -101,6 +112,7 @@ export default function DashboardPage() {
           {activeTab === 'videos' && <VideoUploadView />}
           {activeTab === 'posts' && <PostsView />}
           {activeTab === 'shop' && <ItemShopView />}
+          {activeTab === 'gyms' && <GymsView />}
         </div>
       </div>
     </div>
