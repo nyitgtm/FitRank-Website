@@ -73,3 +73,13 @@ export interface UserPurchase {
   purchasedAt: Date;
   tokensSpent: number;
 }
+
+export interface Report {
+  id: string;
+  reason: string;
+  reporterID: string;
+  status: 'pending' | 'working' | 'fixed';
+  targetID: string;
+  timestamp: any; // Firestore Timestamp
+  type: 'lift' | 'post';
+}
