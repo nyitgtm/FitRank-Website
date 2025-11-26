@@ -23,9 +23,10 @@ export default function UsersView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTeam, setFilterTeam] = useState<string>('all');
   const [filterRole, setFilterRole] = useState<'all' | 'coaches' | 'athletes'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'suspended' | 'deleted' | 'flagged'>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  
+
   // Action menu state
   const [activeMenuUserId, setActiveMenuUserId] = useState<string | null>(null);
   const [modalType, setModalType] = useState<ActionModalType>(null);
@@ -50,15 +51,15 @@ export default function UsersView() {
       const usersRef = collection(db, 'users');
       const q = query(usersRef, orderBy('name'));
       const snapshot = await getDocs(q);
-      
+
       // Fetch additional data for each user
       const usersDataPromises = snapshot.docs.map(async (doc) => {
         const userData = { id: doc.id, ...doc.data() } as User;
-        
+
         // Get friends count
         const friendsSnap = await getDocs(collection(db, `users/${doc.id}/friends`));
         const friendsCount = friendsSnap.size;
-        
+
         // Get workouts count
         const workoutsQuery = query(
           collection(db, 'workouts'),
@@ -66,7 +67,7 @@ export default function UsersView() {
         );
         const workoutsSnap = await getDocs(workoutsQuery);
         const workoutsCount = workoutsSnap.size;
-        
+
         return {
           ...userData,
           friendsCount,
@@ -74,9 +75,9 @@ export default function UsersView() {
           isSuspended: false // Will be fetched from Auth
         } as ExtendedUser;
       });
-      
+
       const usersData = await Promise.all(usersDataPromises);
-      
+
       // Fetch suspension statuses from Firebase Auth
       const userIds = usersData.map(u => u.id);
       try {
@@ -85,7 +86,7 @@ export default function UsersView() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userIds })
         });
-        
+
         if (response.ok) {
           const { userStatuses } = await response.json();
           usersData.forEach(user => {
@@ -95,7 +96,7 @@ export default function UsersView() {
       } catch (error) {
         console.error('Error fetching auth statuses:', error);
       }
-      
+
       setUsers(usersData);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -122,7 +123,7 @@ export default function UsersView() {
     setSelectedUser(user);
     setModalType(type);
     setActiveMenuUserId(null);
-    
+
     // Pre-fill modal with current values
     if (type === 'tokens') {
       setModalValue(user.tokens.toString());
@@ -153,9 +154,9 @@ export default function UsersView() {
       const response = await fetch('/api/users/toggle-suspension', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: user.id, 
-          disabled: !user.isSuspended 
+        body: JSON.stringify({
+          userId: user.id,
+          disabled: !user.isSuspended
         })
       });
 
@@ -208,7 +209,7 @@ export default function UsersView() {
     setUpdating(true);
     try {
       const userRef = doc(db, 'users', selectedUser.id);
-      
+
       if (modalType === 'tokens') {
         const tokens = parseInt(modalValue);
         if (isNaN(tokens)) {
@@ -249,12 +250,16 @@ export default function UsersView() {
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchTerm.toLowerCase());
+      user.username.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesTeam = filterTeam === 'all' || user.team.includes(filterTeam);
-    const matchesRole = filterRole === 'all' || 
-                       (filterRole === 'coaches' && user.isCoach) ||
-                       (filterRole === 'athletes' && !user.isCoach);
-    return matchesSearch && matchesTeam && matchesRole;
+    const matchesRole = filterRole === 'all' ||
+      (filterRole === 'coaches' && user.isCoach) ||
+      (filterRole === 'athletes' && !user.isCoach);
+    const matchesStatus = filterStatus === 'all' ||
+      (filterStatus === 'suspended' && user.isSuspended) ||
+      (filterStatus === 'deleted' && user.deleteUser) ||
+      (filterStatus === 'flagged' && (user.isSuspended || user.deleteUser));
+    return matchesSearch && matchesTeam && matchesRole && matchesStatus;
   });
 
   const sortedUsers = [...filteredUsers].sort((a, b) => {
@@ -348,6 +353,18 @@ export default function UsersView() {
           <option value="coaches">Coaches</option>
           <option value="athletes">Athletes</option>
         </select>
+
+        {/* Status Filter */}
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as 'all' | 'suspended' | 'deleted' | 'flagged')}
+          className="px-5 py-3 bg-[#f5f5f7] border border-transparent rounded-xl text-[15px] text-[#1d1d1f] focus:outline-none focus:bg-white focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10 cursor-pointer"
+        >
+          <option value="all">All Status</option>
+          <option value="suspended">Suspended</option>
+          <option value="deleted">Deleted</option>
+          <option value="flagged">Suspended & Deleted</option>
+        </select>
       </div>
 
       {/* Users Table */}
@@ -361,7 +378,7 @@ export default function UsersView() {
           <p className="text-[14px] mt-2">Try adjusting your filters</p>
         </div>
       ) : (
-  <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-visible">
+        <div className="bg-white border border-[#d2d2d7] rounded-2xl overflow-visible">
           {/* Table Header */}
           <div className="grid grid-cols-7 gap-4 px-6 py-4 bg-[#f5f5f7] border-b border-[#d2d2d7]">
             <button
@@ -414,9 +431,8 @@ export default function UsersView() {
               <div
                 id={`user-row-${user.id}`}
                 key={user.id}
-                className={`grid grid-cols-7 gap-4 px-6 py-4 ${
-                  isEven ? 'bg-white' : 'bg-[#f5f5f7]'
-                } hover:bg-[#e8e8ed] transition-colors`}
+                className={`grid grid-cols-7 gap-4 px-6 py-4 ${user.deleteUser ? 'bg-red-50' : isEven ? 'bg-white' : 'bg-[#f5f5f7]'
+                  } hover:bg-[#e8e8ed] transition-colors`}
               >
                 <div className="text-[15px] text-[#1d1d1f] flex items-center gap-2 flex-wrap">
                   @{user.username}
@@ -428,6 +444,11 @@ export default function UsersView() {
                   {user.isSuspended && (
                     <span className="px-2 py-0.5 text-[11px] font-medium text-[#ff3b30] bg-[#ff3b30]/10 rounded-full">
                       Suspended
+                    </span>
+                  )}
+                  {user.deleteUser && (
+                    <span className="px-2 py-0.5 text-[11px] font-medium text-[#ff3b30] bg-[#ff3b30]/10 rounded-full">
+                      Deleted
                     </span>
                   )}
                 </div>
@@ -455,7 +476,7 @@ export default function UsersView() {
                   >
                     ⋯
                   </button>
-                  
+
                   {isMenuOpen && (
                     <>
                       <div
@@ -496,9 +517,8 @@ export default function UsersView() {
                         </button>
                         <button
                           onClick={() => toggleSuspension(user)}
-                          className={`w-full text-left px-4 py-3 text-[14px] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7] ${
-                            user.isSuspended ? 'text-[#34c759]' : 'text-[#ff3b30]'
-                          }`}
+                          className={`w-full text-left px-4 py-3 text-[14px] hover:bg-[#f5f5f7] transition-colors border-t border-[#d2d2d7] ${user.isSuspended ? 'text-[#34c759]' : 'text-[#ff3b30]'
+                            }`}
                         >
                           {user.isSuspended ? 'Unsuspend Account' : 'Suspend Account'}
                         </button>
@@ -527,7 +547,7 @@ export default function UsersView() {
                 {selectedUser.name} (@{selectedUser.username})
               </p>
             </div>
-            
+
             <div className="p-6">
               {modalType === 'team' ? (
                 <div>
@@ -561,8 +581,8 @@ export default function UsersView() {
                     className="w-full px-4 py-3 bg-[#f5f5f7] border border-transparent rounded-xl text-[15px] text-[#1d1d1f] focus:outline-none focus:bg-white focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
                     placeholder={
                       modalType === 'tokens' ? 'Enter token amount' :
-                      modalType === 'username' ? 'Enter new username' :
-                      'Enter new name'
+                        modalType === 'username' ? 'Enter new username' :
+                          'Enter new name'
                     }
                   />
                 </div>
@@ -580,9 +600,8 @@ export default function UsersView() {
               <button
                 onClick={handleUpdate}
                 disabled={updating}
-                className={`px-5 py-2.5 rounded-xl text-white text-[14px] font-medium ${
-                  updating ? 'bg-[#86868b] cursor-not-allowed' : 'bg-[#0071e3] hover:bg-[#0077ed]'
-                }`}
+                className={`px-5 py-2.5 rounded-xl text-white text-[14px] font-medium ${updating ? 'bg-[#86868b] cursor-not-allowed' : 'bg-[#0071e3] hover:bg-[#0077ed]'
+                  }`}
               >
                 {updating ? 'Updating...' : 'Update'}
               </button>

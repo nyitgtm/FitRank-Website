@@ -6,6 +6,7 @@ export interface User {
   username: string;
   tokens: number;
   isDarkMode?: boolean;
+  deleteUser?: boolean;
 }
 
 export interface Team {
