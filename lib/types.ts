@@ -82,5 +82,7 @@ export interface Report {
   status: 'pending' | 'working' | 'fixed';
   targetID: string;
   timestamp: any; // Firestore Timestamp
-  type: 'lift' | 'post';
+  type: 'lift' | 'post' | 'workout-comment-reply';
+  workoutID?: string;
+  parentCommentID?: string;
 }
