@@ -11,6 +11,9 @@ type SortDirection = 'asc' | 'desc';
 interface ExtendedReport extends Report {
     reporterName?: string;
     reporterUsername?: string;
+    parentCommentText?: string;
+    workoutLift?: string;
+    workoutWeight?: number;
 }
 
 export default function ReportsView() {
@@ -53,6 +56,9 @@ export default function ReportsView() {
 
                 let reporterName = 'Unknown';
                 let reporterUsername = 'unknown';
+                let parentCommentText = 'N/A';
+                let workoutLift = 'N/A';
+                let workoutWeight = 0;
 
                 if (report.reporterID) {
                     try {
@@ -68,10 +74,45 @@ export default function ReportsView() {
                     }
                 }
 
+                if (report.type === 'workout-comment-reply' && report.workoutID && report.parentCommentID) {
+                    try {
+                        // Fetch parent comment
+                        const parentCommentSnap = await getDoc(doc(db, `workouts/${report.workoutID}/comments`, report.parentCommentID));
+                        if (parentCommentSnap.exists()) {
+                            parentCommentText = parentCommentSnap.data().content;
+                        }
+
+                        // Fetch workout
+                        const workoutSnap = await getDoc(doc(db, 'workouts', report.workoutID));
+                        if (workoutSnap.exists()) {
+                            const wData = workoutSnap.data();
+                            workoutLift = wData.liftType;
+                            workoutWeight = wData.weight;
+                        }
+                    } catch (err) {
+                        console.error('Error fetching reply context:', err);
+                    }
+                } else if (report.type === 'workout-comment' && report.workoutID) {
+                    try {
+                        // Fetch workout
+                        const workoutSnap = await getDoc(doc(db, 'workouts', report.workoutID));
+                        if (workoutSnap.exists()) {
+                            const wData = workoutSnap.data();
+                            workoutLift = wData.liftType;
+                            workoutWeight = wData.weight;
+                        }
+                    } catch (err) {
+                        console.error('Error fetching comment context:', err);
+                    }
+                }
+
                 return {
                     ...report,
                     reporterName,
-                    reporterUsername
+                    reporterUsername,
+                    parentCommentText,
+                    workoutLift,
+                    workoutWeight
                 } as ExtendedReport;
             });
 
@@ -89,12 +130,32 @@ export default function ReportsView() {
         setTargetDetails(null);
         try {
             let targetRef;
+            let workoutData: any = null; // To store workout context for comments/replies
 
             if (report.type === 'workout-comment-reply') {
                 if (!report.workoutID || !report.parentCommentID) {
                     throw new Error('Missing workoutID or parentCommentID for reply report');
                 }
                 targetRef = doc(db, `workouts/${report.workoutID}/comments/${report.parentCommentID}/replies`, report.targetID);
+                // Fetch workout context
+                if (report.workoutID) {
+                    const workoutSnap = await getDoc(doc(db, 'workouts', report.workoutID));
+                    if (workoutSnap.exists()) {
+                        workoutData = workoutSnap.data();
+                    }
+                }
+            } else if (report.type === 'workout-comment') {
+                if (!report.workoutID) {
+                    throw new Error('Missing workoutID for comment report');
+                }
+                targetRef = doc(db, `workouts/${report.workoutID}/comments`, report.targetID);
+                // Fetch workout context
+                if (report.workoutID) {
+                    const workoutSnap = await getDoc(doc(db, 'workouts', report.workoutID));
+                    if (workoutSnap.exists()) {
+                        workoutData = workoutSnap.data();
+                    }
+                }
             } else {
                 const collectionName = report.type === 'lift' ? 'workouts' : 'posts';
                 targetRef = doc(db, collectionName, report.targetID);
@@ -120,7 +181,9 @@ export default function ReportsView() {
                 setTargetDetails({
                     id: targetSnap.id,
                     ...data,
-                    authorName: authorName || data.userName || data.authorName
+                    authorName: authorName || data.userName || data.authorName,
+                    workoutLift: workoutData?.liftType, // Add workout context
+                    workoutWeight: workoutData?.weight // Add workout context
                 });
             } else {
                 setTargetDetails({ error: 'Content not found (may have been deleted)' });
@@ -184,6 +247,23 @@ export default function ReportsView() {
                         replyCount: Math.max(0, currentCount - 1)
                     });
                 }
+            } else if (report.type === 'workout-comment') {
+                if (!report.workoutID) {
+                    throw new Error('Missing workoutID');
+                }
+                // Delete the comment (and its subcollection of replies will be orphaned/deleted depending on backend logic, 
+                // but client-side we just delete the doc)
+                await deleteDoc(doc(db, `workouts/${report.workoutID}/comments`, report.targetID));
+
+                // Decrement comment count on parent workout
+                const workoutRef = doc(db, 'workouts', report.workoutID);
+                const workoutSnap = await getDoc(workoutRef);
+                if (workoutSnap.exists()) {
+                    const currentCount = workoutSnap.data().commentCount || 0;
+                    await updateDoc(workoutRef, {
+                        commentCount: Math.max(0, currentCount - 1)
+                    });
+                }
             } else {
                 const collectionName = report.type === 'lift' ? 'workouts' : 'posts';
                 await deleteDoc(doc(db, collectionName, report.targetID));
@@ -192,7 +272,7 @@ export default function ReportsView() {
             // Optionally mark report as fixed
             await handleStatusUpdate(report.id, 'fixed');
 
-            alert(`${report.type === 'lift' ? 'Workout' : report.type === 'post' ? 'Post' : 'Reply'} deleted successfully.`);
+            alert(`${report.type === 'lift' ? 'Workout' : report.type === 'post' ? 'Post' : report.type === 'workout-comment' ? 'Comment' : 'Reply'} deleted successfully.`);
             if (expandedReportId === report.id) {
                 setTargetDetails({ error: 'Content deleted' });
             }
@@ -334,9 +414,10 @@ export default function ReportsView() {
                                         <div className="text-[13px] text-[#1d1d1f]">
                                             <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium mr-2 ${report.type === 'lift' ? 'bg-blue-100 text-blue-800' :
                                                 report.type === 'workout-comment-reply' ? 'bg-orange-100 text-orange-800' :
-                                                    'bg-purple-100 text-purple-800'
+                                                    report.type === 'workout-comment' ? 'bg-yellow-100 text-yellow-800' :
+                                                        'bg-purple-100 text-purple-800'
                                                 }`}>
-                                                {report.type === 'workout-comment-reply' ? 'REPLY' : report.type?.toUpperCase() || 'UNKNOWN'}
+                                                {report.type === 'workout-comment-reply' ? 'REPLY' : report.type === 'workout-comment' ? 'COMMENT' : report.type?.toUpperCase() || 'UNKNOWN'}
                                             </span>
                                             <span className="font-mono text-[12px] text-[#86868b]" title={report.targetID}>
                                                 Target: {report.targetID?.substring(0, 8)}...
@@ -416,7 +497,8 @@ export default function ReportsView() {
                                                         Delete {
                                                             report.type === 'lift' ? 'Workout' :
                                                                 report.type === 'post' ? 'Post' :
-                                                                    'Reply'
+                                                                    report.type === 'workout-comment' ? 'Comment' :
+                                                                        'Reply'
                                                         }
                                                     </button>
                                                 </div>
@@ -459,13 +541,23 @@ export default function ReportsView() {
                                                             </div>
                                                         </>
                                                     )}
+                                                    {report.type === 'workout-comment' && (
+                                                        <div>
+                                                            <span className="text-[13px] text-[#86868b] block mb-1">Workout ID</span>
+                                                            <p className="text-[14px] font-mono text-[#1d1d1f]">{report.workoutID}</p>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
                                             {/* Target Content Details */}
                                             <div>
                                                 <h3 className="text-[16px] font-semibold text-[#1d1d1f] mb-3">
-                                                    Target Content ({report.type === 'workout-comment-reply' ? 'REPLY' : report.type?.toUpperCase()})
+                                                    Target Content ({
+                                                        report.type === 'workout-comment-reply' ? 'REPLY' :
+                                                            report.type === 'workout-comment' ? 'COMMENT' :
+                                                                report.type?.toUpperCase()
+                                                    })
                                                 </h3>
                                                 {loadingDetails ? (
                                                     <div className="flex items-center gap-2 text-[#86868b]">
@@ -511,8 +603,24 @@ export default function ReportsView() {
                                                                         <span>Likes: {targetDetails.likes || 0}</span>
                                                                         <span>Dislikes: {targetDetails.dislikes || 0}</span>
                                                                     </div>
+                                                                    {/* Parent Comment Context */}
+                                                                    <div className="mt-4">
+                                                                        <span className="text-[12px] text-[#86868b] uppercase tracking-wider font-semibold">Context: Parent Comment</span>
+                                                                        <p className="text-[14px] text-[#1d1d1f] mt-1 italic">"{report.parentCommentText}"</p>
+                                                                        <p className="text-[11px] font-mono text-[#86868b] mt-1">ID: {report.parentCommentID}</p>
+                                                                    </div>
+                                                                    {/* Workout Context */}
+                                                                    <div>
+                                                                        <span className="text-[12px] text-[#86868b] uppercase tracking-wider font-semibold">Context: Workout</span>
+                                                                        <div className="flex items-center gap-2 mt-1">
+                                                                            <span className="capitalize text-[14px] font-medium">{targetDetails.workoutLift || 'Unknown'}</span>
+                                                                            <span className="text-[#86868b]">•</span>
+                                                                            <span className="text-[14px]">{targetDetails.workoutWeight || 0} lbs</span>
+                                                                        </div>
+                                                                        <p className="text-[11px] font-mono text-[#86868b] mt-1">ID: {report.workoutID}</p>
+                                                                    </div>
                                                                 </>
-                                                            ) : (
+                                                            ) : report.type === 'lift' ? (
                                                                 <>
                                                                     <div className="grid grid-cols-2 gap-4">
                                                                         <div>
@@ -535,6 +643,32 @@ export default function ReportsView() {
                                                                         </div>
                                                                     )}
                                                                 </>
+                                                            ) : report.type === 'workout-comment' ? (
+                                                                <>
+                                                                    {/* Comment */}
+                                                                    <div className="mb-4 border-b border-[#d2d2d7] pb-4">
+                                                                        <span className="text-[12px] text-[#86868b] uppercase tracking-wider font-semibold">Comment Content</span>
+                                                                        <p className="text-[15px] text-[#1d1d1f] mt-1 font-medium">{targetDetails.content}</p>
+                                                                        <div className="flex gap-4 text-[13px] text-[#86868b] mt-2">
+                                                                            <span>Author: {targetDetails.authorName}</span>
+                                                                            <span>Likes: {targetDetails.likes || 0}</span>
+                                                                            <span>Dislikes: {targetDetails.dislikes || 0}</span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Workout Context */}
+                                                                    <div>
+                                                                        <span className="text-[12px] text-[#86868b] uppercase tracking-wider font-semibold">Context: Workout</span>
+                                                                        <div className="flex items-center gap-2 mt-1">
+                                                                            <span className="capitalize text-[14px] font-medium">{targetDetails.workoutLift || 'Unknown'}</span>
+                                                                            <span className="text-[#86868b]">•</span>
+                                                                            <span className="text-[14px]">{targetDetails.workoutWeight || 0} lbs</span>
+                                                                        </div>
+                                                                        <p className="text-[11px] font-mono text-[#86868b] mt-1">ID: {report.workoutID}</p>
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <p className="text-[#86868b]">No specific details available for this type.</p>
                                                             )}
                                                         </div>
                                                     )
